@@ -2,7 +2,7 @@
     <br>
     <img src="https://user-images.githubusercontent.com/32263112/216588514-0ad68175-c65e-47ee-9ca8-d163572d9be9.png" width="175"> </a> 
     <br><br>FluidFrames.RIFE | video frames AI interpolation app (RIFE-HDv3) <br><br>
-    <a href="https://jangystudio.itch.io/fluidframesrife-video-frames-ai-interpolation-app-rife-hdv3">
+    <a href="https://jangystudio.itch.io/fluidframesrife">
          <img src="https://user-images.githubusercontent.com/86362423/162710522-c40c4f39-a6b9-48bc-84bc-1c6b78319f01.png" width="200">
     </a>
 </div>
