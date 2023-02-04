@@ -59,7 +59,7 @@ External packages are:
 
 ## Known bugs.
 - [ ] Filenames with non-latin symbols (for example kangy, cyrillic etc.) not supported - [Temp solution] rename files like "image" or "video"
-- [ ] When running ReSR.Scaler as Administrator, drag&drop is not working
+- [ ] When running as Administrator, drag&drop is not working
 
 ### Some Examples.
 #### Videos
