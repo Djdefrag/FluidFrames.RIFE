@@ -55,6 +55,7 @@ External packages are:
 - [ ] Update libraries 
     - [x] Python 3.10 (expecting ~10% more performance) 
     - [ ] Python 3.11 (expecting ~30% more performance)
+    - [ ] following pytorch updates
 - [ ] Add slowmotion function
 
 ## Known bugs.
