@@ -65,27 +65,21 @@ External packages are:
 ### Some Examples.
 #### Videos
 
-Original
+1. Original / x2
 
-![all-might-scream](https://user-images.githubusercontent.com/32263112/216591290-36d770c9-6bd9-4dce-aca2-a83e7479c605.gif)
+![209639439-94c8774d-354e-4d56-9123-e1aa4af95e08](https://user-images.githubusercontent.com/32263112/221165591-3a0fb780-3ba8-4cf5-8405-fc83eb58ee66.gif)
 
-x4
+https://user-images.githubusercontent.com/32263112/221165739-71dfd957-5d3d-481b-9a26-bb08d5affa6f.mp4
 
-https://user-images.githubusercontent.com/32263112/216591361-bc93b977-f312-4fa0-b255-33a7cbe43c29.mp4
-
-Original
+2. Original / x4
 
 ![103154](https://user-images.githubusercontent.com/32263112/216591421-4c24c1b3-9929-4806-acd6-28a7f61430b6.gif)
 
-x4
-
 https://user-images.githubusercontent.com/32263112/216591550-6b7ec75a-f371-43bf-9535-95a1182aa6f0.mp4
 
-Original
+3. Original / x4
 
 ![c2C](https://user-images.githubusercontent.com/32263112/216766526-bfbb789d-2868-465f-bbb8-244538f41635.gif)
-
-X2
 
 https://user-images.githubusercontent.com/32263112/216766537-dc665c0e-237a-4a12-acf8-e7c74300af8f.mp4
 
