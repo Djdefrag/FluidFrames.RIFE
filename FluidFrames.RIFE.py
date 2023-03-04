@@ -33,7 +33,21 @@ from win32mica import MICAMODE, ApplyMica
 import sv_ttk
 
 pay      = True
-version  = "v. 10.1"
+version  = "11.0"
+
+# Optimized RIFEHDv3, is now faster and more stable
+# Added a description for each widget, accessible via button next to each widget
+# When selecting 100% as Input Resolution, resizing phase will be skipped (for videos)
+# Input Resolution widget will now accept values > 100%
+# video can be upscaled before passing through AI
+# for example, a video 100x100px with Input Resolution 200%
+# => 100x100px > 200x200px
+# Fix reading and writing images with nonascii characters in filepath. Thanks @jaycalixto ❤
+# Fixed a bug that did not allow resources to be released upon failure
+# Updated dependencies
+# Code cleaning and improvements
+# Removed "Options" button
+# Some little changes
 
 global app_name
 app_name     = "FluidFrames"
@@ -55,12 +69,9 @@ single_file           = False
 multiple_files        = False
 video_files           = False
 video_frames_list     = []
-vram_multiplier       = 1
-default_vram_limiter  = 8
-multiplier_num_tiles  = 2
 cpu_number            = 4
 windows_subversion    = int(platform.version().split('.')[2])
-resize_algorithm      = cv2.INTER_LINEAR
+resize_algorithm      = cv2.INTER_AREA
 compatible_gpus       = torch_directml.device_count()
 
 device_list_names     = []
@@ -81,7 +92,7 @@ torch.autograd.profiler.profile(False)
 torch.autograd.profiler.emit_nvtx(False)
 
 githubme           = "https://github.com/Djdefrag/FluidFrames.RIFE"
-itchme             = "https://jangystudio.itch.io/qualityscaler"
+itchme             = "https://jangystudio.itch.io/fluidframesrife"
 
 default_font          = 'Segoe UI'
 background_color      = "#181818"
@@ -97,7 +108,7 @@ show_image_width      = drag_drop_width * 0.8
 show_image_height     = drag_drop_width * 0.6
 image_text_width      = drag_drop_width * 0.8
 support_button_height = 95 
-button1_y             = 200
+button1_y             = 170
 button2_y             = button1_y + 90
 button3_y             = button2_y + 90
 button4_y             = button3_y + 90
@@ -162,10 +173,6 @@ def image_read(image_to_prepare, flags=cv2.IMREAD_COLOR):
     return cv2.imdecode(np.fromfile(image_to_prepare, dtype=np.uint8), flags)
 
 
-def opengithub(): webbrowser.open(githubme, new=1)
-
-def openitch(): webbrowser.open(itchme, new=1)
-
 def create_temp_dir(name_dir):
     if os.path.exists(name_dir): shutil.rmtree(name_dir)
     if not os.path.exists(name_dir): os.makedirs(name_dir)
@@ -227,7 +234,7 @@ def read_log_file():
 def extract_frames_from_video(video_path):
     video_frames_list = []
     cap          = cv2.VideoCapture(video_path)
-    frame_rate   = float(cap.get(cv2.CAP_PROP_FPS))
+    frame_rate   = int(cap.get(cv2.CAP_PROP_FPS))
     cap.release()
 
     # extract frames
@@ -258,10 +265,12 @@ def video_reconstruction_by_frames(input_video_path, all_files_list, AI_model, c
     clip = ImageSequenceClip.ImageSequenceClip(all_files_list, fps = frame_rate)
     if os.path.exists(audio_file):
         clip.write_videofile(upscaled_video_path,
+                            fps     = frame_rate,
                             audio   = audio_file,
                             threads = cpu_number)
     else:
         clip.write_videofile(upscaled_video_path,
+                            fps     = frame_rate,
                             threads = cpu_number)   
 
 def resize_frame(image_path, new_width, new_height, target_file_extension):
@@ -607,7 +616,7 @@ def generate_middle_image(img0,
     frames_to_generate = generation_factor - 1
     img_base_name = img0.replace('.png', '').replace('.jpg','')
 
-    all_files_list.append(img0) # first image
+    #all_files_list.append(img0) # first image
 
     with torch.no_grad():
         first_img, last_img, h, w = adapt_images(img0, img1, backend, half_precision)
@@ -619,7 +628,7 @@ def generate_middle_image(img0,
             created_image = (mid_image[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
             image_write(created_image_name, created_image)
 
-            all_files_list.append(img0)
+            all_files_list.append(img0) ## problems?
             all_files_list.append(created_image_name)
             all_files_list.append(img1)
 
@@ -640,7 +649,7 @@ def generate_middle_image(img0,
             created_image_prelast = (mid_image_prelast[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
             image_write(prelast_image_name, created_image_prelast)
 
-            all_files_list.append(img0)
+            all_files_list.append(img0) ## problems?
             all_files_list.append(afterfirst_image_name)
             all_files_list.append(middle_image_name)
             all_files_list.append(prelast_image_name)
@@ -712,11 +721,77 @@ def process_generate_video_frames(input_video_path, AI_model, resize_factor, dev
                                             str(e) + '\n\n' +
                                             'Please report the error on Github.com or Itch.io.' +
                                             '\n\nThank you :)')
+        error_root.destroy()
 
 
 # ----------------------- /Core ------------------------
 
 # ---------------------- GUI related ----------------------
+
+def opengithub(): webbrowser.open(githubme, new=1)
+
+def openitch(): webbrowser.open(itchme, new=1)
+
+def open_info_generation_factor():
+    info = """This widget allows you to choose between different generation factors: \n
+- x2 | doubles video framerate | 30fps => 60fps
+- x4 | quadruples video framerate | 30fps => 120fps""" 
+    
+    info_window = tk.Tk()
+    info_window.withdraw()
+    tk.messagebox.showinfo(title = 'AI generation', message = info )
+    info_window.destroy()
+    
+def open_info_backend():
+    info = """This widget allows you to choose the gpu 
+on which to run your chosen AI. \n 
+Keep in mind that the more powerful your gpu is, 
+the faster the upscale will be. \n
+If the list is empty it means the app couldn't find 
+a compatible gpu, try updating your video card driver :)"""
+
+    info_window = tk.Tk()
+    info_window.withdraw()
+    tk.messagebox.showinfo(title = 'AI device', message = info)
+    info_window.destroy()
+
+def open_info_file_extension():
+    info = """This widget allows you to choose the extension of the file generated by AI.\n
+- png | very good quality | supports transparent images
+- jpg | good quality | very fast
+- jpg2 (jpg2000) | very good quality | not very popular
+- bmp | highest quality | slow
+- tiff | highest quality | very slow"""
+
+    info_window = tk.Tk()
+    info_window.withdraw()
+    tk.messagebox.showinfo(title = 'AI output extension', message = info)
+    info_window.destroy()
+
+def open_info_resize():
+    info = """This widget allows you to choose the percentage of the resolution input to the AI.\n
+For example for a 100x100px image:
+- Input resolution 50% => input to AI 50x50px
+- Input resolution 100% => input to AI 100x100px
+- Input resolution 200% => input to AI 200x200px """
+
+    info_window = tk.Tk()
+    info_window.withdraw()
+    tk.messagebox.showinfo(title = 'Input resolution %', message = info)
+    info_window.destroy()
+
+def open_info_cpu():
+    info = """This widget allows you to choose how much cpu to devote to the app.\n
+Where possible the app will use the number of processors you select, for example:
+- Extracting frames from videos
+- Resizing frames from videos
+- Recostructing final video"""
+
+    info_window = tk.Tk()
+    info_window.withdraw()
+    tk.messagebox.showinfo(title   = 'Cpu number', message = info)
+    info_window.destroy() 
+
 
 
 def user_input_checks():
@@ -1129,8 +1204,6 @@ def show_image_in_GUI(original_image):
                        height = 40)
     clean_button["command"] = lambda: place_drag_drop_widget()
 
-
-
 def place_drag_drop_widget():
     clear_input_variables()
 
@@ -1201,9 +1274,9 @@ def combobox_extension_selection(event):
 def place_generation_factor_combobox():
     generation_factor_container = ttk.Notebook(root)
     generation_factor_container.place(x = 45 + left_bar_width/2 - 370/2, 
-                        y = button1_y - 17, 
-                        width  = 370,
-                        height = 75)
+                                        y = button1_y - 17, 
+                                        width  = 370,
+                                        height = 75)
 
     generation_factor_label = ttk.Label(root, 
                                     font       = bold11, 
@@ -1232,6 +1305,17 @@ def place_generation_factor_combobox():
     combo_box_generation_factor.bind('<<ComboboxSelected>>', combobox_generation_factor_selection)
     combo_box_generation_factor.set(generation_factors_array[0])
 
+    generation_factor_info_button = ttk.Button(root,
+                                                padding = '0 0 0 0',
+                                                text    = "i",
+                                                compound = 'left',
+                                                style    = 'Bold.TButton')
+    generation_factor_info_button.place(x = 50,
+                                    y = button1_y + 6,
+                                    width  = 30,
+                                    height = 30)
+    generation_factor_info_button["command"] = lambda: open_info_generation_factor()
+
 def place_backend_combobox():
     backend_container = ttk.Notebook(root)
     backend_container.place(x = 45 + left_bar_width/2 - 370/2, 
@@ -1244,7 +1328,7 @@ def place_backend_combobox():
                             foreground = text_color, 
                             justify    = 'left', 
                             relief     = 'flat', 
-                            text       = " AI backend ")
+                            text       = " AI device ")
     backend_label.place(x = 90,
                         y = button2_y - 2,
                         width  = 155,
@@ -1265,6 +1349,17 @@ def place_backend_combobox():
                             height = 40)
     combo_box_backend.bind('<<ComboboxSelected>>', combobox_backend_selection)
     combo_box_backend.set(device_list_names[0])
+
+    backend_combobox_info_button = ttk.Button(root,
+                               padding = '0 0 0 0',
+                               text    = "i",
+                               compound = 'left',
+                               style    = 'Bold.TButton')
+    backend_combobox_info_button.place(x = 50,
+                                    y = button2_y + 6,
+                                    width  = 30,
+                                    height = 30)
+    backend_combobox_info_button["command"] = lambda: open_info_backend()
 
 def place_file_extension_combobox():
     file_extension_container = ttk.Notebook(root)
@@ -1300,8 +1395,16 @@ def place_file_extension_combobox():
     combobox_file_extension.bind('<<ComboboxSelected>>', combobox_extension_selection)
     combobox_file_extension.set(target_file_extension)
 
-
-
+    file_extension_combobox_info_button = ttk.Button(root,
+                               padding = '0 0 0 0',
+                               text    = "i",
+                               compound = 'left',
+                               style    = 'Bold.TButton')
+    file_extension_combobox_info_button.place(x = 50,
+                                    y = button3_y + 6,
+                                    width  = 30,
+                                    height = 30)
+    file_extension_combobox_info_button["command"] = lambda: open_info_file_extension()
 
 def place_resize_factor_spinbox():
     resize_factor_container = ttk.Notebook(root)
@@ -1336,6 +1439,17 @@ def place_resize_factor_spinbox():
                             y = button4_y - 2,
                             width  = 155,
                             height = 42)
+    
+    resize_spinbox_info_button = ttk.Button(root,
+                               padding = '0 0 0 0',
+                               text    = "i",
+                               compound = 'left',
+                               style    = 'Bold.TButton')
+    resize_spinbox_info_button.place(x = 50,
+                                    y = button4_y + 6,
+                                    width  = 30,
+                                    height = 30)
+    resize_spinbox_info_button["command"] = lambda: open_info_resize()
 
 def place_cpu_number_spinbox():
     cpu_number_container = ttk.Notebook(root)
@@ -1370,20 +1484,20 @@ def place_cpu_number_spinbox():
                     y = button5_y - 2,
                     width  = 155,
                     height = 42)
-
-
-
-def place_advanced_option_button():
-    advance_option_button = ttk.Button(root,
-                               image    = settings_icon,
-                               padding  = '0 0 0 0',
-                               text     = " OPTIONS",
+    
+    cpu_spinbox_info_button = ttk.Button(root,
+                               padding = '0 0 0 0',
+                               text    = "i",
                                compound = 'left',
                                style    = 'Bold.TButton')
-    advance_option_button.place(x = 65,
-                                y = 130,
-                                width  = 150,
-                                height = 40)
+    cpu_spinbox_info_button.place(x = 50,
+                                    y = button5_y + 6,
+                                    width  = 30,
+                                    height = 30)
+    cpu_spinbox_info_button["command"] = lambda: open_info_cpu()
+
+
+
 
 def place_clean_button():
     clean_button = ttk.Button(root, 
@@ -1421,11 +1535,6 @@ def place_app_title():
                 width  = 150,
                 height = 35)
 
-    global logo_itch
-    logo_itch = PhotoImage(file = find_by_relative_path( "Assets" 
-                                                        + os.sep 
-                                                        + "itch_logo.png"))
-
     version_button = ttk.Button(root,
                                image = logo_itch,
                                padding = '0 0 0 0',
@@ -1437,11 +1546,6 @@ def place_app_title():
                         width  = 125,
                         height = 35)
     version_button["command"] = lambda: openitch()
-
-    global logo_git
-    logo_git = PhotoImage(file = find_by_relative_path( "Assets" 
-                                                        + os.sep 
-                                                        + "github_logo.png"))
 
     ft = tkFont.Font(family = default_font)
     Butt_Style = ttk.Style()
@@ -1558,7 +1662,6 @@ class App:
 
         place_background()                                  # Background
         place_app_title()                                   # App title
-        place_advanced_option_button()
         place_generation_factor_combobox()                  # AI models widget
         place_resize_factor_spinbox()                       
         place_backend_combobox()                            # Backend widget
@@ -1590,14 +1693,15 @@ if __name__ == "__main__":
     bold21 = tkFont.Font(family = default_font, size   = round(21 * font_scale), weight = 'bold')
 
     global stop_icon
-    global settings_icon
     global clear_icon
     global play_icon
-    stop_icon     = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep  + "stop_icon.png"))
+    global logo_itch
+    global logo_git
+    logo_git      = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep + "github_logo.png"))
+    logo_itch     = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep + "itch_logo.png"))
+    stop_icon     = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep + "stop_icon.png"))
     play_icon     = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep + "upscale_icon.png"))
     clear_icon    = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep + "clear_icon.png"))
-    settings_icon = tk.PhotoImage(file = find_by_relative_path("Assets" + os.sep + "advanced_settings_icon.png"))
-
 
     app = App(root)
     root.update()
