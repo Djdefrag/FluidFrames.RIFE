@@ -46,7 +46,7 @@ External packages are:
 ## Features.
 
 - [x] Easy to use GUI
-- [x] Video frames interpolation
+- [x] Video frames interpolation x2 / x4
 - [x] Drag&Drop video
 - [x] Resize video before interpolation
 - [x] Multiple gpu backend
