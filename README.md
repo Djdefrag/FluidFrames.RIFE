@@ -8,8 +8,9 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://user-images.githubusercontent.com/32263112/216588704-752de2d7-d78c-4776-9935-f1d44ef4b8a8.PNG"> </a> 
+    <img src="https://user-images.githubusercontent.com/32263112/222885882-f91d000a-dda9-4db9-a162-e6280017575d.png"> </a> 
 </div>
+
 
 ## What is FluidFrames.RIFE?
 FluidFrames.RIFE is a Windows app that uses RIFE-HDv3 artificial intelligence to doubling or quadrupling videos fps.
@@ -67,17 +68,23 @@ External packages are:
 
 1. Original / x2
 
+https://user-images.githubusercontent.com/32263112/222885925-a28122e8-92f8-4e53-b287-4ae17bb177c7.mp4
+
+https://user-images.githubusercontent.com/32263112/222885933-f2e13869-984c-4192-8020-1668035e5cd3.mp4
+
+2. Original / x2
+
 ![209639439-94c8774d-354e-4d56-9123-e1aa4af95e08](https://user-images.githubusercontent.com/32263112/221165591-3a0fb780-3ba8-4cf5-8405-fc83eb58ee66.gif)
 
 https://user-images.githubusercontent.com/32263112/221165739-71dfd957-5d3d-481b-9a26-bb08d5affa6f.mp4
 
-2. Original / x4
+3. Original / x4
 
 ![103154](https://user-images.githubusercontent.com/32263112/216591421-4c24c1b3-9929-4806-acd6-28a7f61430b6.gif)
 
 https://user-images.githubusercontent.com/32263112/216591550-6b7ec75a-f371-43bf-9535-95a1182aa6f0.mp4
 
-3. Original / x4
+4. Original / x4
 
 ![c2C](https://user-images.githubusercontent.com/32263112/216766526-bfbb789d-2868-465f-bbb8-244538f41635.gif)
 
