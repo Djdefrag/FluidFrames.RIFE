@@ -32,22 +32,20 @@ from win32mica import MICAMODE, ApplyMica
 
 import sv_ttk
 
-pay      = True
-version  = "11.0"
+version  = "1.13"
 
-# Optimized RIFEHDv3, is now faster and more stable
-# Added a description for each widget, accessible via button next to each widget
-# When selecting 100% as Input Resolution, resizing phase will be skipped (for videos)
-# Input Resolution widget will now accept values > 100%
-# video can be upscaled before passing through AI
-# for example, a video 100x100px with Input Resolution 200%
-# => 100x100px > 200x200px
-# Fix reading and writing images with nonascii characters in filepath. Thanks @jaycalixto ❤
-# Fixed a bug that did not allow resources to be released upon failure
-# Updated dependencies
-# Code cleaning and improvements
-# Removed "Options" button
-# Some little changes
+# NEW
+# - Added the ability to create slowmotion videos, selectable from the 'AI generation' widget
+
+# GUI
+# - Updated info widget descriptions
+
+# BUGFIX / IMPROVEMENTS
+# - The app will save thr generated video different tags (x2, x4, x2-slowmotion, x4-slowmotion) according to the user's choice
+# - Setted .log file permissions to 777 (maximum permissions), this should solve the problem of reading and writing this file
+# - Setted temp folder permissions to 777 (maximum permissions), this should solve the problem of reading and writing in this folder
+# - General bugfix and improvements
+# - Updated dependencies
 
 global app_name
 app_name     = "FluidFrames"
@@ -55,9 +53,9 @@ second_title = "RIFE"
 
 models_array             = [ 'RIFE_HDv3' ]
 AI_model                 = models_array[0]
-generation_factors_array = ['x2', 'x4']
+generation_factors_array = ['x2', 'x4', 'x2-slowmotion', 'x4-slowmotion']
 generation_factor        = 2
-#                          ['x2', 'x4', 'x2-SlowMotion', 'x4-SlowMotion']
+slowmotion               = False
 
 image_path            = "none"
 device                = 0
@@ -90,9 +88,11 @@ for index in range(compatible_gpus):
 torch.autograd.set_detect_anomaly(False)
 torch.autograd.profiler.profile(False)
 torch.autograd.profiler.emit_nvtx(False)
+if sys.stdout is None: sys.stdout = open(os.devnull, "w")
+if sys.stderr is None: sys.stderr = open(os.devnull, "w")
 
-githubme           = "https://github.com/Djdefrag/FluidFrames.RIFE"
-itchme             = "https://jangystudio.itch.io/fluidframesrife"
+githubme = "https://github.com/Djdefrag/FluidFrames.RIFE"
+itchme   = "https://jangystudio.itch.io/fluidframesrife"
 
 default_font          = 'Segoe UI'
 background_color      = "#181818"
@@ -172,10 +172,12 @@ def image_write(path, image_data):
 def image_read(image_to_prepare, flags=cv2.IMREAD_COLOR):
     return cv2.imdecode(np.fromfile(image_to_prepare, dtype=np.uint8), flags)
 
+def remove_file(name_file):
+    if os.path.exists(name_file): os.remove(name_file)
 
 def create_temp_dir(name_dir):
     if os.path.exists(name_dir): shutil.rmtree(name_dir)
-    if not os.path.exists(name_dir): os.makedirs(name_dir)
+    if not os.path.exists(name_dir): os.makedirs(name_dir, mode=0o777)
 
 def find_by_relative_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -218,13 +220,17 @@ def delete_list_of_files(list_to_delete):
                 os.remove(to_delete)
 
 def write_in_log_file(text_to_insert):
-    log_file_name   = app_name + ".log"
-    with open(log_file_name,'w') as log_file: log_file.write(text_to_insert) 
+    log_file_name = app_name + ".log"
+    with open(log_file_name,'w') as log_file: 
+        os.chmod(log_file_name, 0o777)
+        log_file.write(text_to_insert) 
     log_file.close()
 
 def read_log_file():
-    log_file_name   = app_name + ".log"
-    with open(log_file_name,'r') as log_file: step = log_file.readline()
+    log_file_name = app_name + ".log"
+    with open(log_file_name,'r') as log_file: 
+        os.chmod(log_file_name, 0o777)
+        step = log_file.readline()
     log_file.close()
     return step
 
@@ -250,28 +256,48 @@ def extract_frames_from_video(video_path):
 
     return video_frames_list
 
-def video_reconstruction_by_frames(input_video_path, all_files_list, AI_model, cpu_number, generation_factor):
-    cap          = cv2.VideoCapture(input_video_path)
-    frame_rate   = int(cap.get(cv2.CAP_PROP_FPS)) * generation_factor
+def get_upscaled_video_filepath(input_video_path, slowmotion, AI_model, generation_factor):
     path_as_list = input_video_path.split("/")
     video_name   = str(path_as_list[-1])
     only_path    = input_video_path.replace(video_name, "")
     for video_type in supported_video_list: video_name = video_name.replace(video_type, "")
-    upscaled_video_path = (only_path + video_name + "_" + AI_model + ".mp4")
+
+    if slowmotion: upscaled_video_path = (only_path + video_name + "_"  + AI_model + "x" + str(generation_factor) + "-slowmotion" + ".mp4")
+    else: upscaled_video_path = (only_path + video_name + "_"  + AI_model + "x" + str(generation_factor) + ".mp4")
+
+    return upscaled_video_path
+
+def video_reconstruction_by_frames(input_video_path, 
+                                   all_files_list, 
+                                   AI_model, 
+                                   cpu_number, 
+                                   generation_factor,
+                                   slowmotion):
+    
+    cap = cv2.VideoCapture(input_video_path)
+    if slowmotion: frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
+    else: frame_rate = int(cap.get(cv2.CAP_PROP_FPS)) * generation_factor
     cap.release()
+
+    upscaled_video_path = get_upscaled_video_filepath(input_video_path, slowmotion, AI_model, generation_factor)
 
     audio_file = app_name + "_temp" + os.sep + "audio.mp3"
 
     clip = ImageSequenceClip.ImageSequenceClip(all_files_list, fps = frame_rate)
-    if os.path.exists(audio_file):
+    if slowmotion:
         clip.write_videofile(upscaled_video_path,
                             fps     = frame_rate,
-                            audio   = audio_file,
-                            threads = cpu_number)
+                            threads = cpu_number)  
     else:
-        clip.write_videofile(upscaled_video_path,
-                            fps     = frame_rate,
-                            threads = cpu_number)   
+        if os.path.exists(audio_file):
+            clip.write_videofile(upscaled_video_path,
+                                fps     = frame_rate,
+                                audio   = audio_file,
+                                threads = cpu_number)
+        else:
+            clip.write_videofile(upscaled_video_path,
+                                fps     = frame_rate,
+                                threads = cpu_number)   
 
 def resize_frame(image_path, new_width, new_height, target_file_extension):
     new_image_path = image_path.replace('.jpg', "" + target_file_extension)
@@ -576,7 +602,8 @@ def prepare_model(AI_model, device, half_precision):
     model_path = find_by_relative_path("AI" + os.sep + "RIFE_HDv3.pkl")
     model = RIFEv3(backend)
 
-    model.flownet.load_state_dict(convert(torch.load(model_path, map_location ='cpu'))) # maibe to remove?    
+    model.flownet.load_state_dict(convert(torch.load(model_path, 
+                                                     map_location ='cpu'))) # maibe to remove?    
     model.eval()
         
     if half_precision: model.flownet = model.flownet.half()
@@ -584,27 +611,32 @@ def prepare_model(AI_model, device, half_precision):
 
     return model
 
-def adapt_images(img0, img1, backend, half_precision):
-    img0 = image_read(img0, cv2.IMREAD_UNCHANGED)
-    img1 = image_read(img1, cv2.IMREAD_UNCHANGED)
-    img0 = (torch.tensor(img0.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
-    img1 = (torch.tensor(img1.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
+def adapt_images(img_1, 
+                 img_2, 
+                 backend, 
+                 half_precision):
+    img_1 = image_read(img_1, cv2.IMREAD_UNCHANGED)
+    img_2 = image_read(img_2, cv2.IMREAD_UNCHANGED)
+
+    img_1 = (torch.tensor(img_1.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
+    img_2 = (torch.tensor(img_2.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
 
     if half_precision:
-        img0 = img0.half()
-        img1 = img1.half()
+        img_1 = img_1.half()
+        img_2 = img_2.half()
 
-    _ , _ , h, w = img0.shape
+    _ , _ , h, w = img_1.shape
     ph = ((h - 1) // 32 + 1) * 32
     pw = ((w - 1) // 32 + 1) * 32
     padding = (0, pw - w, 0, ph - h)
-    img0 = F.pad(img0, padding)
-    img1 = F.pad(img1, padding)
 
-    return img0, img1, h, w
+    img_1 = F.pad(img_1, padding)
+    img_2 = F.pad(img_2, padding)
 
-def generate_middle_image(img0, 
-                          img1, 
+    return img_1, img_2, h, w
+
+def generate_middle_image(img_1, 
+                          img_2, 
                           all_files_list,
                           model, 
                           target_file_extension, 
@@ -614,12 +646,10 @@ def generate_middle_image(img0,
 
     backend = torch.device(torch_directml.device(device))
     frames_to_generate = generation_factor - 1
-    img_base_name = img0.replace('.png', '').replace('.jpg','')
-
-    #all_files_list.append(img0) # first image
+    img_base_name = img_1.replace('.png', '').replace('.jpg','')
 
     with torch.no_grad():
-        first_img, last_img, h, w = adapt_images(img0, img1, backend, half_precision)
+        first_img, last_img, h, w = adapt_images(img_1, img_2, backend, half_precision)
 
         if frames_to_generate == 1: #x2
             mid_image = model.inference(first_img, last_img)
@@ -628,9 +658,9 @@ def generate_middle_image(img0,
             created_image = (mid_image[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
             image_write(created_image_name, created_image)
 
-            all_files_list.append(img0) ## problems?
+            all_files_list.append(img_1)
             all_files_list.append(created_image_name)
-            all_files_list.append(img1)
+            all_files_list.append(img_2)
 
         elif frames_to_generate == 3: #x4
             mid_image             = model.inference(first_img, last_img)
@@ -649,19 +679,25 @@ def generate_middle_image(img0,
             created_image_prelast = (mid_image_prelast[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
             image_write(prelast_image_name, created_image_prelast)
 
-            all_files_list.append(img0) ## problems?
+            all_files_list.append(img_1)
             all_files_list.append(afterfirst_image_name)
             all_files_list.append(middle_image_name)
             all_files_list.append(prelast_image_name)
-            all_files_list.append(img1)
+            all_files_list.append(img_2)
 
 
     return all_files_list
 
 
-def process_generate_video_frames(input_video_path, AI_model, resize_factor, device,
-                                    generation_factor, target_file_extension, cpu_number,
-                                    half_precision):
+def process_generate_video_frames(input_video_path, 
+                                  AI_model, 
+                                  resize_factor, 
+                                  device,
+                                  generation_factor, 
+                                  target_file_extension, 
+                                  cpu_number,
+                                  half_precision,
+                                  slowmotion):
     try:
         start = timer()
 
@@ -671,6 +707,7 @@ def process_generate_video_frames(input_video_path, AI_model, resize_factor, dev
       
         write_in_log_file('Extracting video frames...')
         image_list = extract_frames_from_video(input_video_path)
+        print(' > Extracted: ' + str(len(image_list)) + ' frames')
         
         if resize_factor != 1:
             write_in_log_file('Resizing video frames...')
@@ -678,6 +715,8 @@ def process_generate_video_frames(input_video_path, AI_model, resize_factor, dev
                                             resize_factor, 
                                             target_file_extension, 
                                             cpu_number)
+            print(' > Resized: ' + str(len(image_list)) + ' frames')
+
 
         write_in_log_file('Starting...')
         how_many_images  = len(image_list)
@@ -698,14 +737,20 @@ def process_generate_video_frames(input_video_path, AI_model, resize_factor, dev
                                                         generation_factor)
                 done_images += 1
                 write_in_log_file("Generating frame " + str(done_images) + "/" + str(how_many_images))
-            except: 
+            except Exception as e: 
+                print(str(e))
                 pass
 
         write_in_log_file("Processing video...")
         all_files_list = list(dict.fromkeys(all_files_list))
         all_files_list.append(all_files_list[-1])
 
-        video_reconstruction_by_frames(input_video_path, all_files_list, AI_model, cpu_number, generation_factor)
+        video_reconstruction_by_frames(input_video_path, 
+                                       all_files_list, 
+                                       AI_model, 
+                                       cpu_number, 
+                                       generation_factor,
+                                       slowmotion)
 
         write_in_log_file("Video completed [" + str(round(timer() - start)) + " sec.]")
 
@@ -714,14 +759,11 @@ def process_generate_video_frames(input_video_path, AI_model, resize_factor, dev
     except Exception as e:
         write_in_log_file('Error while upscaling' + '\n\n' + str(e)) 
         import tkinter as tk
-        error_root = tk.Tk()
-        error_root.withdraw()
         tk.messagebox.showerror(title   = 'Error', 
                                 message = 'Process failed caused by:\n\n' +
                                             str(e) + '\n\n' +
                                             'Please report the error on Github.com or Itch.io.' +
                                             '\n\nThank you :)')
-        error_root.destroy()
 
 
 # ----------------------- /Core ------------------------
@@ -735,7 +777,9 @@ def openitch(): webbrowser.open(itchme, new=1)
 def open_info_generation_factor():
     info = """This widget allows you to choose between different generation factors: \n
 - x2 | doubles video framerate | 30fps => 60fps
-- x4 | quadruples video framerate | 30fps => 120fps""" 
+- x4 | quadruples video framerate | 30fps => 120fps
+- x2-slowmotion | slowmotion effect by a factor of 2 | no audio
+- x4-slowmotion | slowmotion effect by a factor of 4 | no audio""" 
     
     info_window = tk.Tk()
     info_window.withdraw()
@@ -844,8 +888,12 @@ def start_button_command():
     global cpu_number
     global half_precision
     global generation_factor
+    global slowmotion
 
-    info_string.set("...")
+    remove_file(app_name + ".log")
+
+    info_string.set("Loading...")
+    write_in_log_file("Loading...")
 
     is_ready = user_input_checks()
 
@@ -861,7 +909,8 @@ def start_button_command():
                                                                 generation_factor,
                                                                 target_file_extension,
                                                                 cpu_number,
-                                                                half_precision))
+                                                                half_precision, 
+                                                                slowmotion))
             process_fluid_frames.start()
 
             thread_wait = threading.Thread(target = thread_check_steps_for_videos,
@@ -1244,10 +1293,16 @@ def place_drag_drop_widget():
 
 def combobox_generation_factor_selection(event):
     global generation_factor
+    global slowmotion
 
     selected = str(selected_generation_factor.get())
 
-    generation_factor = int(selected.replace('x', ''))
+    if 'slowmotion' in selected:
+        slowmotion = True
+        generation_factor = int(selected.replace('x', '').replace('-slowmotion', ''))
+    else:
+        slowmotion = False
+        generation_factor = int(selected.replace('x', ''))
 
     combo_box_generation_factor.set('')
     combo_box_generation_factor.set(selected)
