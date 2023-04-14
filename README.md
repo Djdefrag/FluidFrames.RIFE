@@ -53,11 +53,19 @@ External packages are:
 - [x] Compatible video  - mp4, wemb, gif, mkv, flv, avi, mov, qt 
 
 ## Next steps. 🤫
-- [x] Add slowmotion function
-- [ ] Update libraries 
-    - [x] Python 3.10 (expecting ~10% more performance) 
+- [ ] 1.X versions
+    - [x] Switch to Pytorch-directml to support all Directx12 compatible gpu (AMD, Intel, Nvidia)
+    - [x] New GUI with Windows 11 style
+    - [x] Include audio for processed video
+    - [x] Optimizing video frame resize and extraction speed
+    - [x] Multi GPU support (for pc with double GPU, integrated + dedicated)
+    - [x] Python 3.10 (expecting ~10% more performance)
+    - [x] Slowmotion function
+- [ ] 2.X versions (now under development)
     - [ ] Python 3.11 (expecting ~30% more performance)
-    - [ ] following pytorch updates
+    - [ ] Torch/torch-directml 2.0 (expecting ~20% more performance)
+    - [ ] New, completely redesigned graphical interface, with more options for the user
+    - [ ] Process multiple videos at once
 
 ## Known bugs.
 - [ ] When running as Administrator, drag&drop is not working
