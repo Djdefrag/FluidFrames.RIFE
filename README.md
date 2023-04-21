@@ -47,6 +47,11 @@ External packages are:
 
 - [x] Easy to use GUI
 - [x] Video frames interpolation x2 / x4
+   - 30fps => x2 => 60fps
+   - 30fps => x4 => 120fps
+ - [x] Video slowmotion x2 /x4
+   - 30fps => x2_slowmotion => 30fps - 2 times slower
+   - 30fps => x4_slowmotion => 30fps - 4 times slower
 - [x] Drag&Drop video
 - [x] Resize video before interpolation
 - [x] Multiple gpu backend
