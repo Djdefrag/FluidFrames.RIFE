@@ -8,7 +8,7 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://user-images.githubusercontent.com/32263112/235297690-c06fe550-e039-4802-a350-ff5f2f126558.PNG"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/776fd4a7-69b1-47a0-9bed-69e311cf9d54"> </a> 
 </div>
 
 
