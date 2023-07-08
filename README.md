@@ -8,9 +8,8 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/776fd4a7-69b1-47a0-9bed-69e311cf9d54"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/b8cb8011-d5b4-4132-8f16-a7801304d5e4"> </a> 
 </div>
-
 
 ## What is FluidFrames.RIFE?
 FluidFrames.RIFE is a Windows app powered by RIFE-HDv3 AI to fluidify videos and to create slowmotion videos.
@@ -36,10 +35,7 @@ External packages are:
 ## Requirements. 🤓
 - [ ] Windows 11 / Windows 10
 - [ ] RAM >= 8Gb
-- [ ] Directx12 compatible GPU:
-    - [ ] any AMD >= Radeon HD 7000 series
-    - [ ] any Intel HD Integrated >= 4th-gen core
-    - [ ] any NVIDIA >=  GTX 600 series
+- [ ] Any Directx12 compatible GPU with >= 2GB VRAM
 
 ## Features.
 
