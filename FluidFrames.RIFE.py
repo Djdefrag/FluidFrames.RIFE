@@ -1,8 +1,6 @@
-import ctypes
 import itertools
 import multiprocessing
 import os.path
-import platform
 import shutil
 import sys
 import threading
@@ -35,34 +33,34 @@ from moviepy.video.io import ImageSequenceClip
 from PIL import Image
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.optim import AdamW
-from win32mica import MICAMODE, ApplyMica
 
 app_name     = "FluidFrames"
 second_title = "RIFE"
-version      = "2.1"
+version      = "2.2"
 
-githubme     = "https://github.com/Djdefrag/FluidFrames.RIFE"
-itchme       = "https://jangystudio.itch.io/fluidframesrife"
+githubme   = "https://github.com/Djdefrag/FluidFrames.RIFE"
+itchme     = "https://jangystudio.itch.io/fluidframesrife"
+telegramme = "https://linktr.ee/j3ngystudio"
 
-half_precision           = False # torch-directml 1.13.1 ancora non funziona con half precision
+# torch-directml 1.13.1 
+# ancora non funziona con half precision
+half_precision           = False 
 fluidity_options_list    = ['x2', 'x4', 'x2-slowmotion', 'x4-slowmotion']
 fluidity_option          = fluidity_options_list[0]
 
 file_extension_list  = [ '.png', '.jpg', '.jp2', '.bmp', '.tiff' ]
 device_list_names    = []
 device_list          = []
-windows_subversion   = int(platform.version().split('.')[2])
 resize_algorithm     = cv2.INTER_AREA
 
 offset_y_options = 0.1125
-option_y_1       = 0.705
-option_y_2       = option_y_1 + offset_y_options
-option_y_3       = option_y_2 + offset_y_options
-option_y_4       = option_y_1
-option_y_5       = option_y_4 + offset_y_options
-option_y_6       = option_y_5 + offset_y_options
+row1_y           = 0.705
+row2_y           = row1_y + offset_y_options
+row3_y           = row2_y + offset_y_options
 
-transparent_color = "#080808"
+app_name_color    = "#4169E1"
+select_files_widget_color = "#080808"
+
 
 # Classes and utils -------------------
 
@@ -131,13 +129,7 @@ for index in range(torch_directml.device_count()):
     device_list.append(gpu)
     device_list_names.append(gpu.name)
 
-supported_file_extensions = [
-                            #'.jpg', '.jpeg', '.JPG', '.JPEG',
-                            #'.png', '.PNG',
-                            #'.webp', '.WEBP',
-                            #'.bmp', '.BMP',
-                            #'.tif', '.tiff', '.TIF', '.TIFF',
-                            '.mp4', '.MP4',
+supported_file_extensions = ['.mp4', '.MP4',
                             '.webm', '.WEBM',
                             '.mkv', '.MKV',
                             '.flv', '.FLV',
@@ -171,6 +163,8 @@ if sys.stderr is None: sys.stderr = open(os.devnull, "w")
 def opengithub(): webbrowser.open(githubme, new=1)
 
 def openitch(): webbrowser.open(itchme, new=1)
+
+def opentelegram(): webbrowser.open(telegramme, new=1)
 
 def create_temp_dir(name_dir):
     if os.path.exists(name_dir): shutil.rmtree(name_dir)
@@ -235,7 +229,7 @@ def image_write(path, image_data):
     r, buff = cv2.imencode(file_extension, image_data)
     buff.tofile(path)
 
-def image_read(image_to_prepare, flags=cv2.IMREAD_COLOR):
+def image_read(image_to_prepare, flags = cv2.IMREAD_COLOR):
     return cv2.imdecode(np.fromfile(image_to_prepare, dtype=np.uint8), flags)
 
 def resize_image(image_path, resize_factor, selected_output_file_extension):
@@ -280,9 +274,6 @@ def resize_frame_list(image_list, resize_factor, target_file_extension, cpu_numb
 
     return downscaled_images
 
-def is_Windows11():
-    if windows_subversion >= 22000: return True
-
 def remove_file(name_file):
     if os.path.exists(name_file): os.remove(name_file)
 
@@ -297,7 +288,7 @@ def show_error(exception):
 def extract_frames_from_video(video_path):
     video_frames_list = []
     cap          = cv2.VideoCapture(video_path)
-    frame_rate   = int(cap.get(cv2.CAP_PROP_FPS))
+    frame_rate   = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
 
     # extract frames
@@ -324,8 +315,8 @@ def video_reconstruction_by_frames(input_video_path,
                                 cpu_number):
     
     cap = cv2.VideoCapture(input_video_path)
-    if slowmotion: frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
-    else: frame_rate = int(cap.get(cv2.CAP_PROP_FPS)) * fluidification_factor
+    if slowmotion: frame_rate = cap.get(cv2.CAP_PROP_FPS)
+    else: frame_rate = cap.get(cv2.CAP_PROP_FPS) * fluidification_factor
     cap.release()
 
     upscaled_video_path = prepare_output_video_filename(input_video_path, fluidification_factor, slowmotion, resize_factor)
@@ -610,13 +601,19 @@ def stop_thread():
     # to stop a thread execution
     stop = 1 + "x"
 
-def check_upscale_steps(not_used1, not_used2):
+def stop_fluidify_process():
+    global process_fluidify_orchestrator
+    process_fluidify_orchestrator.terminate()
+    process_fluidify_orchestrator.join()
+
+def check_fluidify_steps():
     time.sleep(3)
     try:
         while True:
             step = read_log_file()
             if "All files completed" in step:
                 info_message.set(step)
+                stop_fluidify_process()
                 remove_temp_files()
                 stop_thread()
             elif "Error while fluidifying" in step:
@@ -625,11 +622,12 @@ def check_upscale_steps(not_used1, not_used2):
                 stop_thread()
             elif "Stopped fluidifying" in step:
                 info_message.set("Stopped fluidifying")
+                stop_fluidify_process()
                 remove_temp_files()
                 stop_thread()
             else:
                 info_message.set(step)
-            time.sleep(2)
+            time.sleep(1)
     except:
         place_fluidify_button()
 
@@ -638,14 +636,11 @@ def update_process_status(actual_process_phase):
     write_in_log_file(actual_process_phase) 
 
 def stop_button_command():
-    global process_fluidify_orchestrator
-    process_fluidify_orchestrator.terminate()
-    process_fluidify_orchestrator.join()
-    
+    stop_fluidify_process()
     # this will stop thread that check fluidifying steps
     write_in_log_file("Stopped fluidifying") 
 
-def upscale_button_function(): 
+def fludify_button_command(): 
     global selected_file_list
     global selected_fluidity_option
     global selected_AI_device 
@@ -663,12 +658,13 @@ def upscale_button_function():
 
         print("=================================================")
         print("> Starting fluidify:")
-        print("   Files to fluidify: " + str(len(selected_file_list)))
-        print("   Selected fluidify option: "   + str(selected_fluidity_option))
-        print("   Selected AI device: "         + str(selected_AI_device))
+        print("   Files to fluidify: "        + str(len(selected_file_list)))
+        print("   Selected fluidify option: " + str(selected_fluidity_option))
+        print("   AI half precision: "        + str(half_precision))
+        print("   Selected GPU: "             + str(torch_directml.device_name(selected_AI_device)))
         print("   Selected output file extension: "  + str(selected_output_file_extension))
-        print("   Resize factor: "     + str(int(resize_factor*100)) + "%")
-        print("   Cpu number: "        + str(cpu_number))
+        print("   Resize factor: "                   + str(int(resize_factor*100)) + "%")
+        print("   Cpu number: "                      + str(cpu_number))
         print("=================================================")
 
         place_stop_button()
@@ -685,8 +681,7 @@ def upscale_button_function():
         process_fluidify_orchestrator.start()
 
         thread_wait = threading.Thread(
-                                target = check_upscale_steps,
-                                args   = (1, 2), 
+                                target = check_fluidify_steps,
                                 daemon = True)
         thread_wait.start()
 
@@ -807,7 +802,7 @@ def fluidify_video(video_path,
         except: 
             pass
 
-    write_in_log_file("Processing video...")
+    write_in_log_file("Processing video")
     all_files_list = list(dict.fromkeys(all_files_list))
     all_files_list.append(all_files_list[-1])
 
@@ -976,7 +971,7 @@ def check_supported_selected_files(uploaded_file_list):
     return supported_files_list
 
 def open_files_action():
-    info_message.set("Selecting files...")
+    info_message.set("Selecting files")
 
     uploaded_files_list = list(filedialog.askopenfilenames())
     uploaded_files_counter = len(uploaded_files_list)
@@ -991,8 +986,8 @@ def open_files_action():
 
         global scrollable_frame_file_list
         scrollable_frame_file_list = ScrollableImagesTextFrame(master = window, 
-                                                               fg_color = transparent_color, 
-                                                               bg_color = transparent_color)
+                                                               fg_color = select_files_widget_color, 
+                                                               bg_color = select_files_widget_color)
         scrollable_frame_file_list.place(relx = 0.5, 
                                          rely = 0.25, 
                                          relwidth = 1.0, 
@@ -1057,7 +1052,7 @@ def open_info_fluidity_option():
 def open_info_device():
     info = """This widget allows to choose the gpu to run AI with. \n 
 Keep in mind that the more powerful your gpu is, 
-the faster the upscale will be. \n
+the faster the process will be. \n
 If the list is empty it means the app couldn't find 
 a compatible gpu, try updating your video card driver :)"""
 
@@ -1075,7 +1070,7 @@ def open_info_file_extension():
 
 def open_info_resize():
     info = """This widget allows to choose the resolution input to the AI.\n
-For example for a 100x100px image:
+For example for a 100x100px video:
 - Input resolution 50% => input to AI 50x50px
 - Input resolution 100% => input to AI 100x100px
 - Input resolution 200% => input to AI 200x200px """
@@ -1099,7 +1094,7 @@ Where possible the app will use the number of processors you select, for example
 def place_up_background():
     up_background = CTkLabel(master  = window, 
                             text    = "",
-                            fg_color = transparent_color,
+                            fg_color = select_files_widget_color,
                             font     = bold12,
                             anchor   = "w")
     
@@ -1148,6 +1143,17 @@ def place_github_button():
                             command    = opengithub)
     git_button.place(relx = 0.045, rely = 0.61, anchor = tkinter.CENTER)
 
+def place_telegram_button():
+    telegram_button = CTkButton(master = window, 
+                                width      = 30,
+                                height     = 30,
+                                fg_color   = "black",
+                                text       = "", 
+                                font       = bold11,
+                                image      = logo_telegram,
+                                command    = opentelegram)
+    telegram_button.place(relx = 0.045, rely = 0.67, anchor = tkinter.CENTER)
+
 def place_fluidify_button(): 
     upscale_button = CTkButton(master    = window, 
                                 width      = 140,
@@ -1157,8 +1163,8 @@ def place_fluidify_button():
                                 text       = "FLUIDIFY", 
                                 font       = bold11,
                                 image      = play_icon,
-                                command    = upscale_button_function)
-    upscale_button.place(relx = 0.8, rely = option_y_6, anchor = tkinter.CENTER)
+                                command    = fludify_button_command)
+    upscale_button.place(relx = 0.8, rely = row3_y, anchor = tkinter.CENTER)
     
 def place_stop_button(): 
     stop_button = CTkButton(master   = window, 
@@ -1170,7 +1176,7 @@ def place_stop_button():
                             font       = bold11,
                             image      = stop_icon,
                             command    = stop_button_command)
-    stop_button.place(relx = 0.8, rely = option_y_6, anchor = tkinter.CENTER)
+    stop_button.place(relx = 0.8, rely = row3_y, anchor = tkinter.CENTER)
 
 def place_fluidity_option_menu():
     fluidity_option_button = CTkButton(master  = window, 
@@ -1195,8 +1201,8 @@ def place_fluidity_option_menu():
                                 dropdown_font = bold11,
                                 dropdown_fg_color = "#000000")
 
-    fluidity_option_button.place(relx = 0.20, rely = option_y_1 - 0.05, anchor = tkinter.CENTER)
-    fluidity_option_menu.place(relx = 0.20, rely = option_y_1, anchor = tkinter.CENTER)
+    fluidity_option_button.place(relx = 0.20, rely = row1_y - 0.05, anchor = tkinter.CENTER)
+    fluidity_option_menu.place(relx = 0.20, rely = row1_y, anchor = tkinter.CENTER)
 
 def place_AI_device_menu():
     AI_device_button = CTkButton(master  = window, 
@@ -1222,8 +1228,8 @@ def place_AI_device_menu():
                                     dropdown_font = bold11,
                                     dropdown_fg_color = "#000000")
     
-    AI_device_button.place(relx = 0.20, rely = option_y_2 - 0.05, anchor = tkinter.CENTER)
-    AI_device_menu.place(relx = 0.20, rely = option_y_2, anchor = tkinter.CENTER)
+    AI_device_button.place(relx = 0.20, rely = row2_y - 0.05, anchor = tkinter.CENTER)
+    AI_device_menu.place(relx = 0.20, rely = row2_y, anchor = tkinter.CENTER)
 
 def place_file_extension_menu():
     file_extension_button = CTkButton(master  = window, 
@@ -1248,8 +1254,8 @@ def place_file_extension_menu():
                                         dropdown_font = bold11,
                                         dropdown_fg_color = "#000000")
     
-    file_extension_button.place(relx = 0.20, rely = option_y_3 - 0.05, anchor = tkinter.CENTER)
-    file_extension_menu.place(relx = 0.20, rely = option_y_3, anchor = tkinter.CENTER)
+    file_extension_button.place(relx = 0.20, rely = row3_y - 0.05, anchor = tkinter.CENTER)
+    file_extension_menu.place(relx = 0.20, rely = row3_y, anchor = tkinter.CENTER)
 
 def place_resize_factor_textbox():
     resize_factor_button = CTkButton(master  = window, 
@@ -1270,8 +1276,8 @@ def place_resize_factor_textbox():
                                     fg_color   = "#000000",
                                     textvariable = selected_resize_factor)
     
-    resize_factor_button.place(relx = 0.5, rely = option_y_4 - 0.05, anchor = tkinter.CENTER)
-    resize_factor_textbox.place(relx = 0.5, rely  = option_y_4, anchor = tkinter.CENTER)
+    resize_factor_button.place(relx = 0.5, rely = row1_y - 0.05, anchor = tkinter.CENTER)
+    resize_factor_textbox.place(relx = 0.5, rely  = row1_y, anchor = tkinter.CENTER)
 
 def place_cpu_textbox():
     cpu_button = CTkButton(master  = window, 
@@ -1292,8 +1298,8 @@ def place_cpu_textbox():
                             fg_color   = "#000000",
                             textvariable = selected_cpu_number)
 
-    cpu_button.place(relx = 0.5, rely = option_y_5 - 0.05, anchor = tkinter.CENTER)
-    cpu_textbox.place(relx = 0.5, rely  = option_y_5, anchor = tkinter.CENTER)
+    cpu_button.place(relx = 0.5, rely = row2_y - 0.05, anchor = tkinter.CENTER)
+    cpu_textbox.place(relx = 0.5, rely  = row2_y, anchor = tkinter.CENTER)
 
 def place_loadFile_section():
 
@@ -1303,8 +1309,8 @@ VIDEO - mp4 webm mkv flv gif avi mov mpg qt 3gp"""
 
     input_file_text = CTkLabel(master    = window, 
                                 text     = text_drop,
-                                fg_color = transparent_color,
-                                bg_color = transparent_color,
+                                fg_color = select_files_widget_color,
+                                bg_color = select_files_widget_color,
                                 width   = 300,
                                 height  = 150,
                                 font    = bold12,
@@ -1332,11 +1338,6 @@ def place_message_label():
                             corner_radius = 25)
     message_label.place(relx = 0.8, rely = 0.56, anchor = tkinter.CENTER)
 
-def apply_windows_transparency_effect(window_root):
-    window_root.wm_attributes("-transparent", transparent_color)
-    hwnd = ctypes.windll.user32.GetParent(window_root.winfo_id())
-    ApplyMica(hwnd, MICAMODE.DARK )
-
 
 
 class App():
@@ -1349,9 +1350,11 @@ class App():
         window.iconbitmap(find_by_relative_path("Assets" + os.sep + "logo.ico"))
 
         place_up_background()
+
         place_app_name()
         place_itch_button()
         place_github_button()
+        place_telegram_button()
 
         place_fluidity_option_menu()
         place_AI_device_menu()
@@ -1364,8 +1367,6 @@ class App():
         place_fluidify_button()
 
         place_loadFile_section()
-
-        if is_Windows11(): apply_windows_transparency_effect(window)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
@@ -1388,16 +1389,15 @@ if __name__ == "__main__":
     selected_AI_device = 0
 
     info_message = tk.StringVar()
-    selected_AI  = tk.StringVar()
     selected_resize_factor  = tk.StringVar()
-    selected_backend        = tk.StringVar()
-    selected_file_extension = tk.StringVar()
     selected_cpu_number     = tk.StringVar()
 
     info_message.set("Hi :)")
 
+    cpu_count = str(int(os.cpu_count()/2))
+
     selected_resize_factor.set("70")
-    selected_cpu_number.set("4")
+    selected_cpu_number.set(cpu_count)
 
     bold8  = CTkFont(family = "Segoe UI", size = 8, weight = "bold")
     bold9  = CTkFont(family = "Segoe UI", size = 9, weight = "bold")
@@ -1409,7 +1409,6 @@ if __name__ == "__main__":
     bold20 = CTkFont(family = "Segoe UI", size = 20, weight = "bold")
     bold21 = CTkFont(family = "Segoe UI", size = 21, weight = "bold")
 
-
     global stop_icon
     global clear_icon
     global play_icon
@@ -1417,6 +1416,7 @@ if __name__ == "__main__":
     global logo_git
     logo_git   = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "github_logo.png")), size=(15, 15))
     logo_itch  = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "itch_logo.png")),  size=(13, 13))
+    logo_telegram = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "telegram_logo.png")),  size=(15, 15))
     stop_icon  = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "stop_icon.png")), size=(15, 15))
     play_icon  = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "upscale_icon.png")), size=(15, 15))
     clear_icon = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "clear_icon.png")), size=(15, 15))
