@@ -1,14 +1,11 @@
-import itertools
 import multiprocessing
 import os.path
 import shutil
 import sys
 import threading
 import time
-import tkinter
 import tkinter as tk
 import webbrowser
-from multiprocessing.pool import ThreadPool
 from timeit import default_timer as timer
 
 import cv2
@@ -36,22 +33,26 @@ from torch.optim import AdamW
 
 app_name     = "FluidFrames"
 second_title = "RIFE"
-version      = "2.2"
+version      = "2.3"
 
 githubme   = "https://github.com/Djdefrag/FluidFrames.RIFE"
 itchme     = "https://jangystudio.itch.io/fluidframesrife"
 telegramme = "https://linktr.ee/j3ngystudio"
 
-# torch-directml 1.13.1 
-# ancora non funziona con half precision
 half_precision           = False 
-fluidity_options_list    = ['x2', 'x4', 'x2-slowmotion', 'x4-slowmotion']
-fluidity_option          = fluidity_options_list[0]
+fluidity_options_list    = [
+                            'x2', 
+                            'x4', 
+                            'x2-slowmotion', 
+                            'x4-slowmotion'
+                            ]
 
-file_extension_list  = [ '.png', '.jpg', '.jp2', '.bmp', '.tiff' ]
+image_extension_list  = [ '.png', '.jpg', '.bmp', '.tiff' ]
+video_extension_list  = [ '.mp4', '.avi' ]
+
 device_list_names    = []
 device_list          = []
-resize_algorithm     = cv2.INTER_AREA
+resize_algorithm     = cv2.INTER_AREA 
 
 offset_y_options = 0.1125
 row1_y           = 0.705
@@ -166,6 +167,12 @@ def openitch(): webbrowser.open(itchme, new=1)
 
 def opentelegram(): webbrowser.open(telegramme, new=1)
 
+def image_write(path, image_data):
+    cv2.imwrite(path, image_data)
+
+def image_read(image_to_prepare, flags = cv2.IMREAD_UNCHANGED):
+    return cv2.imread(image_to_prepare, flags)
+
 def create_temp_dir(name_dir):
     if os.path.exists(name_dir): shutil.rmtree(name_dir)
     if not os.path.exists(name_dir): os.makedirs(name_dir, mode=0o777)
@@ -192,27 +199,18 @@ def find_by_relative_path(relative_path):
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
-def prepare_output_image_filename(image_path, selected_AI_model, resize_factor, selected_output_file_extension):
-    result_path = os.path.splitext(image_path)[0] # remove extension
-
-    resize_percentage = str(int(resize_factor * 100)) + "%"
-    to_append = "_"  + selected_AI_model + "_" + resize_percentage + selected_output_file_extension
-
-    if "_resized" in result_path: 
-        result_path = result_path.replace("_resized", "") 
-        result_path = result_path + to_append
-    else:
-        result_path = result_path + to_append
-
-    return result_path
-
-def prepare_output_video_filename(video_path, fluidification_factor, slowmotion, resize_factor):
+def prepare_output_video_filename(video_path, 
+                                  fluidification_factor, 
+                                  slowmotion, 
+                                  resize_factor, 
+                                  selected_video_output = ".mp4"):
+    
     result_video_path = os.path.splitext(video_path)[0]  # remove extension
 
     resize_percentage = str(int(resize_factor * 100)) + "%"
     
-    if slowmotion: to_append = "_RIFEx" + str(fluidification_factor) + "_" + "slowmo" + "_" + resize_percentage + ".mp4"
-    else:          to_append = "_RIFEx" + str(fluidification_factor) + "_" + resize_percentage + ".mp4"
+    if slowmotion: to_append = "_RIFEx" + str(fluidification_factor) + "_" + "slowmo" + "_" + resize_percentage + selected_video_output
+    else:          to_append = "_RIFEx" + str(fluidification_factor) + "_" + resize_percentage + selected_video_output
 
     result_video_path = result_video_path + to_append
 
@@ -224,55 +222,12 @@ def delete_list_of_files(list_to_delete):
             if os.path.exists(to_delete):
                 os.remove(to_delete)
 
-def image_write(path, image_data):
-    _, file_extension = os.path.splitext(path)
-    r, buff = cv2.imencode(file_extension, image_data)
-    buff.tofile(path)
+def resize_frames(frame_1, frame_2, target_width, target_height):
 
-def image_read(image_to_prepare, flags = cv2.IMREAD_COLOR):
-    return cv2.imdecode(np.fromfile(image_to_prepare, dtype=np.uint8), flags)
+    frame_1_resized = cv2.resize(frame_1, (target_width, target_height), interpolation = resize_algorithm)    
+    frame_2_resized = cv2.resize(frame_2, (target_width, target_height), interpolation = resize_algorithm)    
 
-def resize_image(image_path, resize_factor, selected_output_file_extension):
-    new_image_path = (os.path.splitext(image_path)[0] 
-                      + "_resized" 
-                      + selected_output_file_extension)
-
-    old_image  = image_read(image_path, cv2.IMREAD_UNCHANGED)
-    new_width  = int(old_image.shape[1] * resize_factor)
-    new_height = int(old_image.shape[0] * resize_factor)
-
-    resized_image = cv2.resize(old_image, (new_width, new_height), interpolation = resize_algorithm)    
-    image_write(new_image_path, resized_image)
-    return new_image_path
-
-def resize_frame(image_path, new_width, new_height, target_file_extension):
-    new_image_path = image_path.replace('.jpg', "" + target_file_extension)
-    
-    old_image = cv2.imread(image_path.strip(), cv2.IMREAD_UNCHANGED)
-
-    resized_image = cv2.resize(old_image, (new_width, new_height), 
-                                interpolation = resize_algorithm)    
-    image_write(new_image_path, resized_image)
-
-def resize_frame_list(image_list, resize_factor, target_file_extension, cpu_number):
-    downscaled_images = []
-
-    old_image = Image.open(image_list[1])
-    new_width, new_height = old_image.size
-    new_width = int(new_width * resize_factor)
-    new_height = int(new_height * resize_factor)
-    
-    with ThreadPool(cpu_number) as pool:
-        pool.starmap(resize_frame, zip(image_list, 
-                                    itertools.repeat(new_width), 
-                                    itertools.repeat(new_height), 
-                                    itertools.repeat(target_file_extension)))
-
-    for image in image_list:
-        resized_image_path = os.path.splitext(image)[0] + target_file_extension
-        downscaled_images.append(resized_image_path)
-
-    return downscaled_images
+    return frame_1_resized, frame_2_resized
 
 def remove_file(name_file):
     if os.path.exists(name_file): os.remove(name_file)
@@ -293,8 +248,8 @@ def extract_frames_from_video(video_path):
 
     # extract frames
     video = VideoFileClip(video_path)
-    img_sequence = app_name + "_temp" + os.sep + "frame_%01d" + '.jpg'
-    video_frames_list = video.write_images_sequence(img_sequence, 
+    frame_sequence = app_name + "_temp" + os.sep + "frame_%01d" + '.jpg'
+    video_frames_list = video.write_images_sequence(frame_sequence, 
                                                     verbose = False,
                                                     logger  = None, 
                                                     fps     = frame_rate)
@@ -308,35 +263,50 @@ def extract_frames_from_video(video_path):
     return video_frames_list
 
 def video_reconstruction_by_frames(input_video_path, 
-                                all_files_list, 
-                                fluidification_factor,
-                                slowmotion,
-                                resize_factor,
-                                cpu_number):
+                                    all_files_list, 
+                                    fluidification_factor,
+                                    slowmotion,
+                                    resize_factor,
+                                    cpu_number,
+                                    selected_video_extension):
     
-    cap = cv2.VideoCapture(input_video_path)
+    # Find original video FPS
+    cap          = cv2.VideoCapture(input_video_path)
     if slowmotion: frame_rate = cap.get(cv2.CAP_PROP_FPS)
     else: frame_rate = cap.get(cv2.CAP_PROP_FPS) * fluidification_factor
     cap.release()
 
-    upscaled_video_path = prepare_output_video_filename(input_video_path, fluidification_factor, slowmotion, resize_factor)
-    audio_file = app_name + "_temp" + os.sep + "audio.mp3"
+    # Choose the appropriate codec
+    if selected_video_extension == '.mp4':
+        extension = '.mp4'
+        codec = 'libx264'
+    elif selected_video_extension == '.avi':
+        extension = '.avi'
+        codec = 'png'
 
-    clip = ImageSequenceClip.ImageSequenceClip(all_files_list, 
-                                               fps = frame_rate)
-    if os.path.exists(audio_file):
+    audio_file = app_name + "_temp" + os.sep + "audio.mp3"
+    upscaled_video_path = prepare_output_video_filename(input_video_path, 
+                                                        fluidification_factor, 
+                                                        slowmotion, 
+                                                        resize_factor, 
+                                                        selected_video_extension)
+
+    clip = ImageSequenceClip.ImageSequenceClip(all_files_list, fps = frame_rate)
+    if os.path.exists(audio_file) and slowmotion != True:
         clip.write_videofile(upscaled_video_path,
                             fps     = frame_rate,
                             audio   = audio_file,
+                            codec   = codec,
                             verbose = False,
                             logger  = None,
                             threads = cpu_number)
     else:
         clip.write_videofile(upscaled_video_path,
                              fps     = frame_rate,
+                             codec   = codec,
                              verbose = False,
                              logger  = None,
-                             threads = cpu_number)       
+                             threads = cpu_number)      
 
 
 
@@ -577,17 +547,18 @@ def prepare_model(backend, half_precision):
 
     model_path = find_by_relative_path("AI" + os.sep + "RIFE_HDv3.pkl")
     model = RIFEv3(backend)
-    
-    loadnet = torch.load(model_path, map_location = torch.device('cpu'))
-    model.flownet.load_state_dict(convert(loadnet))    
+
+    with torch.no_grad():
+        pretrained_model = torch.load(model_path, map_location = torch.device('cpu'))
+        model.flownet.load_state_dict(convert(pretrained_model))
+
     model.eval()
 
-    model.flownet.zero_grad(set_to_none = True)
-        
     if half_precision: model.flownet = model.flownet.half()
-    model.flownet.to(backend, non_blocking = True)
 
-    return model    
+    model.flownet.to(backend, non_blocking=True)
+
+    return model
 
 
 
@@ -640,64 +611,13 @@ def stop_button_command():
     # this will stop thread that check fluidifying steps
     write_in_log_file("Stopped fluidifying") 
 
-def fludify_button_command(): 
-    global selected_file_list
-    global selected_fluidity_option
-    global selected_AI_device 
-    global selected_output_file_extension
-    global resize_factor
-    global cpu_number
+def frames_to_tensors(frame_1, 
+                      frame_2, 
+                      backend, 
+                      half_precision):
 
-    global process_fluidify_orchestrator
-
-    remove_file(app_name + ".log")
-    
-    if user_input_checks():
-        info_message.set("Loading")
-        write_in_log_file("Loading")
-
-        print("=================================================")
-        print("> Starting fluidify:")
-        print("   Files to fluidify: "        + str(len(selected_file_list)))
-        print("   Selected fluidify option: " + str(selected_fluidity_option))
-        print("   AI half precision: "        + str(half_precision))
-        print("   Selected GPU: "             + str(torch_directml.device_name(selected_AI_device)))
-        print("   Selected output file extension: "  + str(selected_output_file_extension))
-        print("   Resize factor: "                   + str(int(resize_factor*100)) + "%")
-        print("   Cpu number: "                      + str(cpu_number))
-        print("=================================================")
-
-        place_stop_button()
-
-        process_fluidify_orchestrator = multiprocessing.Process(
-                                            target = fluidify_orchestrator,
-                                            args   = (selected_file_list,
-                                                    selected_fluidity_option,
-                                                    selected_AI_device, 
-                                                    selected_output_file_extension,
-                                                    resize_factor,
-                                                    cpu_number,
-                                                    half_precision))
-        process_fluidify_orchestrator.start()
-
-        thread_wait = threading.Thread(
-                                target = check_fluidify_steps,
-                                daemon = True)
-        thread_wait.start()
-
-def adapt_images(img_1, 
-                 img_2, 
-                 backend, 
-                 half_precision):
-    img_1 = image_read(img_1, cv2.IMREAD_UNCHANGED)
-    img_2 = image_read(img_2, cv2.IMREAD_UNCHANGED)
-
-    img_1 = (torch.tensor(img_1.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
-    img_2 = (torch.tensor(img_2.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
-
-    if half_precision:
-        img_1 = img_1.half()
-        img_2 = img_2.half()
+    img_1 = (torch.tensor(frame_1.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
+    img_2 = (torch.tensor(frame_2.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
 
     _ , _ , h, w = img_1.shape
     ph = ((h - 1) // 32 + 1) * 32
@@ -707,10 +627,20 @@ def adapt_images(img_1,
     img_1 = F.pad(img_1, padding)
     img_2 = F.pad(img_2, padding)
 
+    if half_precision:
+        img_1 = img_1.half()
+        img_2 = img_2.half()
+
     return img_1, img_2, h, w
 
-def AI_generate_frames(img_1, 
-                        img_2, 
+def tensor_to_frame(result, h, w):
+    return (result[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
+
+def AI_generate_frames(frame1, 
+                        frame2, 
+                        frame_1_name,
+                        frame_2_name,
+                        frame_base_name,
                         all_files_list,
                         AI_model, 
                         selected_output_file_extension, 
@@ -719,99 +649,119 @@ def AI_generate_frames(img_1,
                         fluidification_factor):
 
     frames_to_generate = fluidification_factor - 1
-    img_base_name = os.path.splitext(img_1)[0]  # remove extension
 
     with torch.no_grad():
-        first_img, last_img, h, w = adapt_images(img_1, img_2, backend, half_precision)
+        first_frame_tensor, last_frame_tensor, h, w = frames_to_tensors(frame1, frame2, backend, half_precision)
 
-        if frames_to_generate == 1: #x2
-            mid_image = AI_model.inference(first_img, last_img)
+        if frames_to_generate == 1: 
+            # fluidification x2
+            middle_frame_name = frame_base_name + '_middle' + selected_output_file_extension
 
-            created_image_name = img_base_name + '_middle' + selected_output_file_extension
-            created_image = (mid_image[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
-            image_write(created_image_name, created_image)
-
-            all_files_list.append(img_1)
-            all_files_list.append(created_image_name)
-            all_files_list.append(img_2)
-
-        elif frames_to_generate == 3: #x4
-            mid_image             = AI_model.inference(first_img, last_img)
-            mid_image_after_first = AI_model.inference(first_img, mid_image)
-            mid_image_prelast     = AI_model.inference(mid_image, last_img)
+            middle_frame_tensor = AI_model.inference(first_frame_tensor, last_frame_tensor)
+            middle_frame = tensor_to_frame(middle_frame_tensor, h, w)
             
-            middle_image_name = img_base_name + '_middle' + selected_output_file_extension
-            created_image_middle = (mid_image[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
-            image_write(middle_image_name, created_image_middle)
+            image_write(frame_1_name, frame1)
+            image_write(middle_frame_name, middle_frame)
+            image_write(frame_2_name, frame2)
 
-            afterfirst_image_name = img_base_name + '_afterfirst' + selected_output_file_extension
-            created_image_afterfirst = (mid_image_after_first[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
-            image_write(afterfirst_image_name, created_image_afterfirst)
+            all_files_list.append(frame_1_name)
+            all_files_list.append(middle_frame_name)
+            all_files_list.append(frame_2_name)
 
-            prelast_image_name = img_base_name + '_prelast' + selected_output_file_extension
-            created_image_prelast = (mid_image_prelast[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
-            image_write(prelast_image_name, created_image_prelast)
+        elif frames_to_generate == 3: 
+            # fluidification x4
+            middle_frame_name      = frame_base_name + '_middle' + selected_output_file_extension
+            after_first_frame_name = frame_base_name + '_afterfirst' + selected_output_file_extension
+            prelast_frame_name     = frame_base_name + '_prelast' + selected_output_file_extension
 
-            all_files_list.append(img_1)
-            all_files_list.append(afterfirst_image_name)
-            all_files_list.append(middle_image_name)
-            all_files_list.append(prelast_image_name)
-            all_files_list.append(img_2)
+            middle_frame_tensor       = AI_model.inference(first_frame_tensor, last_frame_tensor)
+            after_first_frame_tensor  = AI_model.inference(first_frame_tensor, middle_frame_tensor)
+            prelast_frame_tensor      = AI_model.inference(middle_frame_tensor, last_frame_tensor)
+            
+            after_first_frame = tensor_to_frame(after_first_frame_tensor, h, w)
+            middle_frame      = tensor_to_frame(middle_frame_tensor, h, w)
+            prelast_frame     = tensor_to_frame(prelast_frame_tensor, h, w)
+
+            image_write(frame_1_name, frame1)
+            image_write(after_first_frame_name, after_first_frame)
+            image_write(middle_frame_name, middle_frame)
+            image_write(prelast_frame_name, prelast_frame)
+            image_write(frame_2_name, frame2)
+
+            all_files_list.append(frame_1_name)
+            all_files_list.append(after_first_frame_name)
+            all_files_list.append(middle_frame_name)
+            all_files_list.append(prelast_frame_name)
+            all_files_list.append(frame_2_name)
 
     return all_files_list
 
 def fluidify_video(video_path, 
-                AI_model,
-                fluidification_factor, 
-                slowmotion,
-                resize_factor, 
-                backend,
-                selected_output_file_extension, 
-                cpu_number,
-                half_precision):
-
+                   AI_model, 
+                   fluidification_factor, 
+                   slowmotion, 
+                   resize_factor, 
+                   backend, 
+                   selected_image_extension, 
+                   selected_video_extension,
+                   cpu_number, 
+                   half_precision):
+    
     create_temp_dir(app_name + "_temp")
-
     update_process_status('Extracting video frames')
     frame_list = extract_frames_from_video(video_path)
-    
-    if resize_factor != 1:
-        update_process_status('Resizing video frames')
-        frame_list  = resize_frame_list(frame_list, 
-                                        resize_factor, 
-                                        selected_output_file_extension, 
-                                        cpu_number)
+
+    temp_frame    = image_read(frame_list[0])
+    target_height = int(temp_frame.shape[0] * resize_factor)
+    target_width  = int(temp_frame.shape[1] * resize_factor)   
 
     update_process_status('Starting')
-    all_files_list   = []
-    how_many_frames  = len(frame_list)
-    done_frames      = 0
+    how_many_frames = len(frame_list)
+    all_files_list  = []
+    done_frames     = 0
 
-    for index in range(how_many_frames):
-        try:
-            all_files_list = AI_generate_frames(frame_list[index], 
-                                                frame_list[index + 1], 
-                                                all_files_list,
-                                                AI_model, 
-                                                selected_output_file_extension, 
-                                                backend, 
-                                                half_precision,
-                                                fluidification_factor)
-            done_frames += 1
-            if (index % 8) == 0: update_process_status("Fluidifying frame " + str(done_frames) + "/" + str(how_many_frames))
-        except: 
-            pass
+    for index, _ in enumerate(frame_list[:-1]):
+        frame_1_name    = frame_list[index]
+        frame_2_name    = frame_list[index + 1]
+        frame_base_name = os.path.splitext(frame_1_name)[0]
+
+        frame_1 = image_read(frame_list[index])
+        frame_2 = image_read(frame_list[index + 1])
+
+        if resize_factor != 1:
+            frame_1, frame_2 = resize_frames(frame_1, frame_2, target_width, target_height)
+
+        all_files_list = AI_generate_frames(frame_1, 
+                                            frame_2, 
+                                            frame_1_name,
+                                            frame_2_name,
+                                            frame_base_name,
+                                            all_files_list, 
+                                            AI_model, 
+                                            selected_image_extension, 
+                                            backend, 
+                                            half_precision, 
+                                            fluidification_factor)
+        done_frames += 1
+        if index % 8 == 0: update_process_status("Fluidifying frame " 
+                                                    + str(done_frames) 
+                                                    + "/" 
+                                                    + str(how_many_frames))
+        
 
     write_in_log_file("Processing video")
-    all_files_list = list(dict.fromkeys(all_files_list))
-    all_files_list.append(all_files_list[-1])
 
+    # Remove duplicated frames from list
+    all_files_list = list(dict.fromkeys(all_files_list))
+
+    update_process_status("Processing fluidified video")
     video_reconstruction_by_frames(video_path, 
-                                    all_files_list, 
-                                    fluidification_factor,
-                                    slowmotion,
-                                    resize_factor,
-                                    cpu_number)
+                                   all_files_list, 
+                                   fluidification_factor, 
+                                   slowmotion, 
+                                   resize_factor, 
+                                   cpu_number,
+                                   selected_video_extension)
 
 def check_fluidification_option(selected_fluidity_option):
     slowmotion = False
@@ -828,7 +778,8 @@ def check_fluidification_option(selected_fluidity_option):
 def fluidify_orchestrator(selected_file_list,
                         selected_fluidity_option,
                         selected_AI_device, 
-                        selected_output_file_extension,
+                        selected_image_extension,
+                        selected_video_extension,
                         resize_factor,
                         cpu_number,
                         half_precision):
@@ -854,7 +805,8 @@ def fluidify_orchestrator(selected_file_list,
                             slowmotion,
                             resize_factor, 
                             backend,
-                            selected_output_file_extension, 
+                            selected_image_extension, 
+                            selected_video_extension,
                             cpu_number,
                             half_precision)
 
@@ -865,6 +817,54 @@ def fluidify_orchestrator(selected_file_list,
         update_process_status('Error while fluidifying') 
         show_error(exception)
 
+def fludify_button_command(): 
+    global selected_file_list
+    global selected_fluidity_option
+    global selected_AI_device 
+    global selected_image_extension
+    global selected_video_extension
+    global resize_factor
+    global cpu_number
+
+    global process_fluidify_orchestrator
+
+    remove_file(app_name + ".log")
+    
+    if user_input_checks():
+        info_message.set("Loading")
+        write_in_log_file("Loading")
+
+        print("=================================================")
+        print("> Starting fluidify:")
+        print("   Files to fluidify: "        + str(len(selected_file_list)))
+        print("   Selected fluidify option: " + str(selected_fluidity_option))
+        print("   AI half precision: "        + str(half_precision))
+        print("   Selected GPU: "             + str(torch_directml.device_name(selected_AI_device)))
+        print("   Selected image output extension: "          + str(selected_image_extension))
+        print("   Selected video output extension: "          + str(selected_video_extension))
+        print("   Resize factor: "                   + str(int(resize_factor*100)) + "%")
+        print("   Cpu number: "                      + str(cpu_number))
+        print("=================================================")
+
+        place_stop_button()
+
+        process_fluidify_orchestrator = multiprocessing.Process(
+                                            target = fluidify_orchestrator,
+                                            args   = (selected_file_list,
+                                                    selected_fluidity_option,
+                                                    selected_AI_device, 
+                                                    selected_image_extension,
+                                                    selected_video_extension,
+                                                    resize_factor,
+                                                    cpu_number,
+                                                    half_precision))
+        process_fluidify_orchestrator.start()
+
+        thread_wait = threading.Thread(
+                                target = check_fluidify_steps,
+                                daemon = True)
+        thread_wait.start()
+
 
 
 # GUI utils function ---------------------------
@@ -873,7 +873,7 @@ def user_input_checks():
     global selected_file_list
     global selected_fluidity_option
     global selected_AI_device 
-    global selected_output_file_extension
+    global selected_image_extension
     global resize_factor
     global cpu_number
 
@@ -914,19 +914,6 @@ def user_input_checks():
 
 
     return is_ready
-
-def extract_image_info(image_file):
-    image_name = str(image_file.split("/")[-1])
-
-    image  = image_read(image_file, cv2.IMREAD_UNCHANGED)
-    width  = int(image.shape[1])
-    height = int(image.shape[0])
-
-    image_label = ( "IMAGE" + " | " + image_name + " | " + str(width) + "x" + str(height) )
-
-    ctkimage = CTkImage(Image.open(image_file), size = (25, 25))
-
-    return image_label, ctkimage
 
 def extract_video_info(video_file):
     cap          = cv2.VideoCapture(video_file)
@@ -992,7 +979,7 @@ def open_files_action():
                                          rely = 0.25, 
                                          relwidth = 1.0, 
                                          relheight = 0.475, 
-                                         anchor = tkinter.CENTER)
+                                         anchor = tk.CENTER)
         
         scrollable_frame_file_list.add_clean_button()
 
@@ -1005,12 +992,7 @@ def open_files_action():
                                                     image = ctkimage,
                                                     file_element = actual_file)
                 remove_file("temp.jpg")
-            else:
-                # image
-                image_label, ctkimage = extract_image_info(actual_file)
-                scrollable_frame_file_list.add_item(text_to_show = image_label, 
-                                                    image = ctkimage,
-                                                    file_element = actual_file)
+
     
         info_message.set("Ready")
 
@@ -1033,8 +1015,12 @@ def select_AI_device_from_menu(new_value: str):
             selected_AI_device = device.index
 
 def select_output_file_extension_from_menu(new_value: str):
-    global selected_output_file_extension    
-    selected_output_file_extension = new_value
+    global selected_image_extension    
+    selected_image_extension = new_value
+
+def select_video_extension_from_menu(new_value: str):
+    global selected_video_extension   
+    selected_video_extension = new_value
 
 
 
@@ -1062,7 +1048,6 @@ def open_info_file_extension():
     info = """This widget allows to choose the extension of generated frames.\n
 - png | very good quality | supports transparent images
 - jpg | good quality | very fast
-- jp2 (jpg2000) | very good quality | not very popular
 - bmp | highest quality | slow
 - tiff | highest quality | very slow"""
 
@@ -1087,6 +1072,14 @@ Where possible the app will use the number of processors you select, for example
 
     tk.messagebox.showinfo(title = 'Cpu number', message = info)
 
+def open_info_video_extension():
+    info = """This widget allows you to choose the video output:
+
+- .mp4  | produces good quality and well compressed video
+- .avi  | produces the highest quality video"""
+
+    tk.messagebox.showinfo(title = 'Video output', message = info)  
+
 
 
 # GUI place functions ---------------------------
@@ -1102,7 +1095,7 @@ def place_up_background():
                         rely = 0.0, 
                         relwidth = 1.0,  
                         relheight = 1.0,  
-                        anchor = tkinter.CENTER)
+                        anchor = tk.CENTER)
 
 def place_app_name():
     app_name_label = CTkLabel(master     = window, 
@@ -1111,7 +1104,7 @@ def place_app_name():
                               font       = bold19,
                               anchor     = "w")
     
-    app_name_label.place(relx = 0.5, rely = 0.545, anchor = tkinter.CENTER)
+    app_name_label.place(relx = 0.5, rely = 0.545, anchor = tk.CENTER)
 
     subtitle_app_name_label = CTkLabel(master  = window, 
                                     text       = second_title,
@@ -1119,7 +1112,7 @@ def place_app_name():
                                     font       = bold18,
                                     anchor     = "w")
     
-    subtitle_app_name_label.place(relx = 0.5, rely = 0.585, anchor = tkinter.CENTER)
+    subtitle_app_name_label.place(relx = 0.5, rely = 0.585, anchor = tk.CENTER)
 
 def place_itch_button(): 
     itch_button = CTkButton(master     = window, 
@@ -1130,7 +1123,7 @@ def place_itch_button():
                             font       = bold11,
                             image      = logo_itch,
                             command    = openitch)
-    itch_button.place(relx = 0.045, rely = 0.55, anchor = tkinter.CENTER)
+    itch_button.place(relx = 0.045, rely = 0.55, anchor = tk.CENTER)
 
 def place_github_button():
     git_button = CTkButton(master      = window, 
@@ -1141,7 +1134,7 @@ def place_github_button():
                             font       = bold11,
                             image      = logo_git,
                             command    = opengithub)
-    git_button.place(relx = 0.045, rely = 0.61, anchor = tkinter.CENTER)
+    git_button.place(relx = 0.045, rely = 0.61, anchor = tk.CENTER)
 
 def place_telegram_button():
     telegram_button = CTkButton(master = window, 
@@ -1152,7 +1145,7 @@ def place_telegram_button():
                                 font       = bold11,
                                 image      = logo_telegram,
                                 command    = opentelegram)
-    telegram_button.place(relx = 0.045, rely = 0.67, anchor = tkinter.CENTER)
+    telegram_button.place(relx = 0.045, rely = 0.67, anchor = tk.CENTER)
 
 def place_fluidify_button(): 
     upscale_button = CTkButton(master    = window, 
@@ -1164,7 +1157,7 @@ def place_fluidify_button():
                                 font       = bold11,
                                 image      = play_icon,
                                 command    = fludify_button_command)
-    upscale_button.place(relx = 0.8, rely = row3_y, anchor = tkinter.CENTER)
+    upscale_button.place(relx = 0.8, rely = row3_y, anchor = tk.CENTER)
     
 def place_stop_button(): 
     stop_button = CTkButton(master   = window, 
@@ -1176,7 +1169,7 @@ def place_stop_button():
                             font       = bold11,
                             image      = stop_icon,
                             command    = stop_button_command)
-    stop_button.place(relx = 0.8, rely = row3_y, anchor = tkinter.CENTER)
+    stop_button.place(relx = 0.8, rely = row3_y, anchor = tk.CENTER)
 
 def place_fluidity_option_menu():
     fluidity_option_button = CTkButton(master  = window, 
@@ -1201,8 +1194,8 @@ def place_fluidity_option_menu():
                                 dropdown_font = bold11,
                                 dropdown_fg_color = "#000000")
 
-    fluidity_option_button.place(relx = 0.20, rely = row1_y - 0.05, anchor = tkinter.CENTER)
-    fluidity_option_menu.place(relx = 0.20, rely = row1_y, anchor = tkinter.CENTER)
+    fluidity_option_button.place(relx = 0.20, rely = row1_y - 0.05, anchor = tk.CENTER)
+    fluidity_option_menu.place(relx = 0.20, rely = row1_y, anchor = tk.CENTER)
 
 def place_AI_device_menu():
     AI_device_button = CTkButton(master  = window, 
@@ -1228,14 +1221,14 @@ def place_AI_device_menu():
                                     dropdown_font = bold11,
                                     dropdown_fg_color = "#000000")
     
-    AI_device_button.place(relx = 0.20, rely = row2_y - 0.05, anchor = tkinter.CENTER)
-    AI_device_menu.place(relx = 0.20, rely = row2_y, anchor = tkinter.CENTER)
+    AI_device_button.place(relx = 0.20, rely = row2_y - 0.05, anchor = tk.CENTER)
+    AI_device_menu.place(relx = 0.20, rely = row2_y, anchor = tk.CENTER)
 
 def place_file_extension_menu():
     file_extension_button = CTkButton(master  = window, 
                               fg_color   = "black",
                               text_color = "#ffbf00",
-                              text     = "AI output",
+                              text     = "Frames output",
                               height   = 23,
                               width    = 130,
                               font     = bold11,
@@ -1244,7 +1237,7 @@ def place_file_extension_menu():
                               command = open_info_file_extension)
 
     file_extension_menu = CTkOptionMenu(master  = window, 
-                                        values     = file_extension_list,
+                                        values     = image_extension_list,
                                         width      = 140,
                                         font       = bold11,
                                         height     = 30,
@@ -1254,8 +1247,35 @@ def place_file_extension_menu():
                                         dropdown_font = bold11,
                                         dropdown_fg_color = "#000000")
     
-    file_extension_button.place(relx = 0.20, rely = row3_y - 0.05, anchor = tkinter.CENTER)
-    file_extension_menu.place(relx = 0.20, rely = row3_y, anchor = tkinter.CENTER)
+    file_extension_button.place(relx = 0.20, rely = row3_y - 0.05, anchor = tk.CENTER)
+    file_extension_menu.place(relx = 0.20, rely = row3_y, anchor = tk.CENTER)
+
+def place_video_extension_menu():
+    video_extension_button = CTkButton(master  = window, 
+                              fg_color   = "black",
+                              text_color = "#ffbf00",
+                              text     = "Video output",
+                              height   = 23,
+                              width    = 130,
+                              font     = bold11,
+                              corner_radius = 25,
+                              anchor  = "center",
+                              command = open_info_video_extension)
+
+    video_extension_menu = CTkOptionMenu(master  = window, 
+                                    values     = video_extension_list,
+                                    width      = 140,
+                                    font       = bold11,
+                                    height     = 30,
+                                    fg_color   = "#000000",
+                                    anchor     = "center",
+                                    dynamic_resizing = False,
+                                    command    = select_video_extension_from_menu,
+                                    dropdown_font = bold11,
+                                    dropdown_fg_color = "#000000")
+    
+    video_extension_button.place(relx = 0.5, rely = row1_y - 0.05, anchor = tk.CENTER)
+    video_extension_menu.place(relx = 0.5, rely = row1_y, anchor = tk.CENTER)
 
 def place_resize_factor_textbox():
     resize_factor_button = CTkButton(master  = window, 
@@ -1276,8 +1296,8 @@ def place_resize_factor_textbox():
                                     fg_color   = "#000000",
                                     textvariable = selected_resize_factor)
     
-    resize_factor_button.place(relx = 0.5, rely = row1_y - 0.05, anchor = tkinter.CENTER)
-    resize_factor_textbox.place(relx = 0.5, rely  = row1_y, anchor = tkinter.CENTER)
+    resize_factor_button.place(relx = 0.5, rely = row2_y - 0.05, anchor = tk.CENTER)
+    resize_factor_textbox.place(relx = 0.5, rely  = row2_y, anchor = tk.CENTER)
 
 def place_cpu_textbox():
     cpu_button = CTkButton(master  = window, 
@@ -1298,8 +1318,8 @@ def place_cpu_textbox():
                             fg_color   = "#000000",
                             textvariable = selected_cpu_number)
 
-    cpu_button.place(relx = 0.5, rely = row2_y - 0.05, anchor = tkinter.CENTER)
-    cpu_textbox.place(relx = 0.5, rely  = row2_y, anchor = tkinter.CENTER)
+    cpu_button.place(relx = 0.5, rely = row3_y - 0.05, anchor = tk.CENTER)
+    cpu_textbox.place(relx = 0.5, rely  = row3_y, anchor = tk.CENTER)
 
 def place_loadFile_section():
 
@@ -1324,8 +1344,8 @@ VIDEO - mp4 webm mkv flv gif avi mov mpg qt 3gp"""
                                 border_spacing = 0,
                                 command        = open_files_action)
 
-    input_file_text.place(relx = 0.5, rely = 0.22,  anchor = tkinter.CENTER)
-    input_file_button.place(relx = 0.5, rely = 0.4, anchor = tkinter.CENTER)
+    input_file_text.place(relx = 0.5, rely = 0.22,  anchor = tk.CENTER)
+    input_file_button.place(relx = 0.5, rely = 0.4, anchor = tk.CENTER)
 
 def place_message_label():
     message_label = CTkLabel(master  = window, 
@@ -1336,7 +1356,7 @@ def place_message_label():
                             text_color   = "#000000",
                             anchor       = "center",
                             corner_radius = 25)
-    message_label.place(relx = 0.8, rely = 0.56, anchor = tkinter.CENTER)
+    message_label.place(relx = 0.8, rely = 0.56, anchor = tk.CENTER)
 
 
 
@@ -1360,6 +1380,7 @@ class App():
         place_AI_device_menu()
         place_file_extension_menu()
 
+        place_video_extension_menu()
         place_resize_factor_textbox()
         place_cpu_textbox()
 
@@ -1379,24 +1400,27 @@ if __name__ == "__main__":
     global selected_file_list
     global selected_fluidity_option
     global selected_AI_device 
-    global selected_output_file_extension
     global resize_factor
     global cpu_number
 
+    global selected_image_extension
+    global selected_video_extension
+
     selected_file_list = []
-    selected_fluidity_option = fluidity_options_list[0]
-    selected_output_file_extension = file_extension_list[0]
     selected_AI_device = 0
 
-    info_message = tk.StringVar()
+    selected_fluidity_option = fluidity_options_list[0]
+    selected_image_extension = image_extension_list[0]
+    selected_video_extension = video_extension_list[0]
+
+    info_message            = tk.StringVar()
     selected_resize_factor  = tk.StringVar()
     selected_cpu_number     = tk.StringVar()
 
     info_message.set("Hi :)")
 
-    cpu_count = str(int(os.cpu_count()/2))
-
     selected_resize_factor.set("70")
+    cpu_count = str(int(os.cpu_count()/2))
     selected_cpu_number.set(cpu_count)
 
     bold8  = CTkFont(family = "Segoe UI", size = 8, weight = "bold")
@@ -1409,17 +1433,12 @@ if __name__ == "__main__":
     bold20 = CTkFont(family = "Segoe UI", size = 20, weight = "bold")
     bold21 = CTkFont(family = "Segoe UI", size = 21, weight = "bold")
 
-    global stop_icon
-    global clear_icon
-    global play_icon
-    global logo_itch
-    global logo_git
-    logo_git   = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "github_logo.png")), size=(15, 15))
-    logo_itch  = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "itch_logo.png")),  size=(13, 13))
+    logo_git      = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "github_logo.png")), size=(15, 15))
+    logo_itch     = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "itch_logo.png")),  size=(13, 13))
     logo_telegram = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "telegram_logo.png")),  size=(15, 15))
-    stop_icon  = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "stop_icon.png")), size=(15, 15))
-    play_icon  = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "upscale_icon.png")), size=(15, 15))
-    clear_icon = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "clear_icon.png")), size=(15, 15))
+    stop_icon     = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "stop_icon.png")), size=(15, 15))
+    play_icon     = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "upscale_icon.png")), size=(15, 15))
+    clear_icon    = CTkImage(Image.open(find_by_relative_path("Assets" + os.sep + "clear_icon.png")), size=(15, 15))
 
     app = App(window)
     window.update()
