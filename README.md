@@ -8,7 +8,7 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/b8cb8011-d5b4-4132-8f16-a7801304d5e4"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/7f9d64a8-6362-4973-af34-8a102003437d"> </a> 
 </div>
 
 ## What is FluidFrames.RIFE?
@@ -28,7 +28,7 @@ RIFE - https://github.com/megvii-research/ECCV2022-RIFE
 FluidFrames.RIFE is completely written in Python, from backend to frontend. 
 External packages are:
 - AI  -> torch / torch-directml
-- GUI -> customtkinter / win32mica
+- GUI -> customtkinter
 - Image/video -> openCV / moviepy
 - Packaging   -> pyinstaller / upx
 
