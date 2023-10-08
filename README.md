@@ -1,7 +1,7 @@
 <div align="center">
     <br>
     <img src="https://user-images.githubusercontent.com/32263112/216588514-0ad68175-c65e-47ee-9ca8-d163572d9be9.png" width="175"> </a> 
-    <br><br>FluidFrames.RIFE | video AI interpolation app (RIFE-HDv3) <br><br>
+    <br><br>FluidFrames.RIFE | video AI interpolation app <br><br>
     <a href="https://jangystudio.itch.io/fluidframesrife">
          <button>
             <img src="https://static.itch.io/images/badge-color.svg" width="225" height="70">
@@ -10,20 +10,19 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/1987c450-21ef-41ba-885c-fbf1bdd17aea"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/9c8c1b7d-611b-45f2-bd7e-d2645ff15fe7"> </a> 
 </div>
 
 ## What is FluidFrames.RIFE?
 FluidFrames.RIFE is a Windows app powered by RIFE-HDv3 AI to fluidify videos and to create slowmotion videos.
 
 ## Other AI projects.🤓
-
 - https://github.com/Djdefrag/QualityScaler / QualityScaler - image/video AI upscaler app (BSRGAN)
 - https://github.com/Djdefrag/RealESRScaler / RealESRScaler - image/video AI upscaler app (Real-ESRGAN)
 
 ## Credits.
-
 RIFE - https://github.com/megvii-research/ECCV2022-RIFE
+PraticalRIFE - https://github.com/hzwer/Practical-RIFE
 
 ## How is made. 🛠
 
@@ -32,7 +31,7 @@ External packages are:
 - AI  -> torch / torch-directml
 - GUI -> customtkinter
 - Image/video -> openCV / moviepy
-- Packaging   -> pyinstaller / upx
+- Packaging   -> pyinstaller
 
 ## Requirements. 🤓
 - [ ] Windows 11 / Windows 10
@@ -54,7 +53,7 @@ External packages are:
 - [x] Compatible video  - mp4, wemb, gif, mkv, flv, avi, mov, qt 
 
 ## Next steps. 🤫
-- [ ] 1.X versions
+- [x] 1.X versions
     - [x] Switch to Pytorch-directml to support all Directx12 compatible gpu (AMD, Intel, Nvidia)
     - [x] New GUI with Windows 11 style
     - [x] Include audio for processed video
@@ -65,6 +64,7 @@ External packages are:
 - [ ] 2.X versions (now under development)
     - [x] New, completely redesigned graphical interface based on @customtkinter
     - [x] Fluidify multiple videos at once
+    - [x] Save AI generated frames as files
     - [ ] Python 3.11 (expecting ~30% more performance)
     - [ ] Torch/torch-directml 2.0 (expecting ~20% more performance)
 
