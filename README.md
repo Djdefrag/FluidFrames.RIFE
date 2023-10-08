@@ -21,8 +21,8 @@ FluidFrames.RIFE is a Windows app powered by RIFE-HDv3 AI to fluidify videos and
 - https://github.com/Djdefrag/RealESRScaler / RealESRScaler - image/video AI upscaler app (Real-ESRGAN)
 
 ## Credits.
-RIFE - https://github.com/megvii-research/ECCV2022-RIFE
-PraticalRIFE - https://github.com/hzwer/Practical-RIFE
+- RIFE - https://github.com/megvii-research/ECCV2022-RIFE
+- PraticalRIFE - https://github.com/hzwer/Practical-RIFE
 
 ## How is made. 🛠
 
