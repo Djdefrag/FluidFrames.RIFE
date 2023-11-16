@@ -1,16 +1,19 @@
 
 # Standard library imports
 import sys
-from shutil          import rmtree, copytree
-from time            import sleep
-from threading       import Thread
 from timeit          import default_timer as timer
-from subprocess      import run  as subprocess_run
+from time            import sleep
 from webbrowser      import open as open_browser
+from threading       import Thread
 
-from multiprocessing import (
+from multiprocessing import ( 
     Process, 
-    freeze_support
+    freeze_support 
+)
+
+from shutil import ( 
+    rmtree as remove_directory,
+    copytree
 )
 
 from os import (
@@ -20,11 +23,9 @@ from os import (
     cpu_count   as os_cpu_count,
     makedirs    as os_makedirs,
     remove      as os_remove,
-    listdir     as os_listdir
 )
 
 from os.path import (
-    basename as os_path_basename,
     dirname  as os_path_dirname,
     abspath  as os_path_abspath,
     join     as os_path_join,
@@ -38,11 +39,9 @@ from PIL.Image        import open as pillow_image_open
 from moviepy.editor   import VideoFileClip
 from moviepy.video.io import ImageSequenceClip
 
-from torch.nn.functional import interpolate as torch_nn_interpolate
-
 from torch import (
     device          as torch_device,
-    no_grad         as torch_no_grad,
+    inference_mode  as torch_inference_mode,
     linspace        as torch_linspace,
     cat             as torch_cat,
     load            as torch_load,
@@ -53,13 +52,8 @@ from torch import (
     tensor          as torch_tensor,
 )
 
-from torch_directml import (
-     device       as directml_device,
-     device_count as directml_device_count,
-     device_name  as directml_device_name
-)
-
 from torch.nn.functional import (
+    interpolate as torch_nn_interpolate,
     grid_sample as torch_nn_functional_grid_sample,
     pad         as torch_nn_functional_pad
 )
@@ -75,18 +69,28 @@ from torch.nn import (
     LeakyReLU,
 )
 
+from torch_directml import (
+     device       as directml_device,
+     device_count as directml_device_count,
+     device_name  as directml_device_name
+)
+
 from cv2 import (
     CAP_PROP_FPS,
     CAP_PROP_FRAME_COUNT,
     CAP_PROP_FRAME_HEIGHT,
     CAP_PROP_FRAME_WIDTH,
     IMREAD_UNCHANGED,
-    INTER_AREA,
     INTER_LINEAR,
     VideoCapture as opencv_VideoCapture,
-    imread       as opencv_imread,
-    imwrite      as opencv_imwrite,
+    imdecode     as opencv_imdecode,
+    imencode     as opencv_imencode,
     resize       as opencv_resize,
+)
+
+from numpy import (
+    frombuffer  as numpy_frombuffer,
+    uint8
 )
 
 # GUI imports
@@ -109,28 +113,22 @@ from customtkinter import (
 
 app_name     = "FluidFrames"
 second_title = "RIFE"
-version      = "2.7"
+version      = "2.9"
 
 githubme   = "https://github.com/Djdefrag/FluidFrames.RIFE"
 telegramme = "https://linktr.ee/j3ngystudio"
 
-half_precision           = False 
-fluidity_options_list    = [
-                            'x2', 
-                            'x4', 
-                            'x8',
-                            'x2-slowmotion', 
-                            'x4-slowmotion',
-                            'x8-slowmotion'
+fluidity_options_list    = [ 
+                            'x2', 'x4', 'x8',
+                            'x2-slowmotion', 'x4-slowmotion', 'x8-slowmotion'
                             ]
 
 image_extension_list  = [ '.jpg', '.png', '.bmp', '.tiff' ]
-video_extension_list  = [ '.mp4', '.avi' ]
+video_extension_list  = [ '.mp4 (x264)', '.mp4 (x265)', '.avi' ]
 save_frames_list      = [ 'Enabled', 'Disabled' ]
 
 device_list_names    = []
 device_list          = []
-resize_algorithm     = INTER_AREA
 
 offset_y_options = 0.125
 row0_y           = 0.56
@@ -157,7 +155,10 @@ if sys.stderr is None: sys.stderr = open(os_devnull, "w")
 
 # ------------------ AI ------------------
 
-def load_AI_model(backend, half_precision):
+backwarp_tenGrid = {}
+
+@torch_inference_mode(True)
+def load_AI_model(backend):
     def convert(param):
         return {
             k.replace("module.", ""): v
@@ -167,55 +168,148 @@ def load_AI_model(backend, half_precision):
 
     update_process_status(f"Loading AI model")
 
-    model_path = find_by_relative_path(f"AI{os_separator}RIFE_v4.6.pkl")
+    model_path = find_by_relative_path(f"AI{os_separator}RIFE_v4.9.pkl")
 
-    with torch_no_grad():
-        model            = IFNet_46(backend)
-        pretrained_model = torch_load(model_path, map_location = torch_device('cpu'))
-        model.load_state_dict(convert(pretrained_model))
-        model.eval()
+    model            = IFNet_49(backend)
+    pretrained_model = torch_load(model_path, map_location = torch_device('cpu'))
+    model.load_state_dict(convert(pretrained_model))
+    model.eval()
 
-        if half_precision: model = model.half()
-        model.to(backend, non_blocking = True)
+    model.to(backend, non_blocking = True)
 
     return model
 
-def warp(tenInput, tenFlow, backend):
-    backwarp_tenGrid = {}
+@torch_inference_mode(True)
+def AI_generate_frames(frame1, 
+                        frame2, 
+                        frame_1_name,
+                        frame_2_name,
+                        frame_base_name,
+                        all_files_list,
+                        AI_model, 
+                        selected_output_file_extension, 
+                        backend, 
+                        fluidification_factor):
+    
+    frames_to_generate = fluidification_factor - 1
 
+    frame_1_tensor, frame_2_tensor, h, w = frames_to_tensors(frame1, frame2, backend)
+
+    if frames_to_generate == 1: 
+        # fluidification x2
+        frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
+
+        frame_1_1 = tensor_to_frame(AI_model.inference(frame_1_tensor, frame_2_tensor), h, w)
+        
+        image_write(frame_1_name,   frame1)
+        image_write(frame_1_1_name, frame_1_1)
+        image_write(frame_2_name,   frame2)
+
+        all_files_list.append(frame_1_name)
+        all_files_list.append(frame_1_1_name)
+        all_files_list.append(frame_2_name)
+
+    elif frames_to_generate == 3: 
+        # fluidification x4
+        frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
+        frame_1_2_name = f"{frame_base_name}_.2{selected_output_file_extension}"
+        frame_1_3_name = f"{frame_base_name}_.3{selected_output_file_extension}"
+
+        frame_1_2_tensor = AI_model.inference(frame_1_tensor, frame_2_tensor)
+        frame_1_1_tensor = AI_model.inference(frame_1_tensor, frame_1_2_tensor)
+        frame_1_3_tensor = AI_model.inference(frame_1_2_tensor, frame_2_tensor)
+        
+        frame_1_1 = tensor_to_frame(frame_1_1_tensor, h, w)
+        frame_1_2 = tensor_to_frame(frame_1_2_tensor, h, w)
+        frame_1_3 = tensor_to_frame(frame_1_3_tensor, h, w)
+
+        image_write(frame_1_name,   frame1)
+        image_write(frame_1_1_name, frame_1_1)
+        image_write(frame_1_2_name, frame_1_2)
+        image_write(frame_1_3_name, frame_1_3)
+        image_write(frame_2_name,   frame2)
+
+        all_files_list.append(frame_1_name)
+        all_files_list.append(frame_1_1_name)
+        all_files_list.append(frame_1_2_name)
+        all_files_list.append(frame_1_3_name)
+        all_files_list.append(frame_2_name)
+
+    elif frames_to_generate == 7: 
+        # fluidification x8
+        frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
+        frame_1_2_name = f"{frame_base_name}_.2{selected_output_file_extension}"
+        frame_1_3_name = f"{frame_base_name}_.3{selected_output_file_extension}"
+        frame_1_4_name = f"{frame_base_name}_.4{selected_output_file_extension}"
+        frame_1_5_name = f"{frame_base_name}_.5{selected_output_file_extension}"
+        frame_1_6_name = f"{frame_base_name}_.6{selected_output_file_extension}"
+        frame_1_7_name = f"{frame_base_name}_.7{selected_output_file_extension}"
+
+        frame_1_4_tensor   = AI_model.inference(frame_1_tensor, frame_2_tensor)
+        frame_1_2_tensor   = AI_model.inference(frame_1_tensor, frame_1_4_tensor)
+        frame_1_1_tensor   = AI_model.inference(frame_1_tensor, frame_1_2_tensor)
+        frame_1_3_tensor   = AI_model.inference(frame_1_2_tensor, frame_1_4_tensor)
+
+        frame_1_6_tensor   = AI_model.inference(frame_1_4_tensor, frame_2_tensor)
+        frame_1_5_tensor   = AI_model.inference(frame_1_4_tensor, frame_1_6_tensor)
+        frame_1_7_tensor   = AI_model.inference(frame_1_6_tensor, frame_2_tensor)
+
+        frame_1_1 = tensor_to_frame(frame_1_1_tensor, h, w)
+        frame_1_2 = tensor_to_frame(frame_1_2_tensor, h, w)
+        frame_1_3 = tensor_to_frame(frame_1_3_tensor, h, w)
+        frame_1_4 = tensor_to_frame(frame_1_4_tensor, h, w)
+        frame_1_5 = tensor_to_frame(frame_1_5_tensor, h, w)
+        frame_1_6 = tensor_to_frame(frame_1_6_tensor, h, w)
+        frame_1_7 = tensor_to_frame(frame_1_7_tensor, h, w)
+
+        image_write(frame_1_name, frame1)
+        image_write(frame_1_1_name, frame_1_1)
+        image_write(frame_1_2_name, frame_1_2)
+        image_write(frame_1_3_name, frame_1_3)
+        image_write(frame_1_4_name, frame_1_4)
+        image_write(frame_1_5_name, frame_1_5)
+        image_write(frame_1_6_name, frame_1_6)
+        image_write(frame_1_7_name, frame_1_7)
+        image_write(frame_2_name, frame2)
+
+        all_files_list.append(frame_1_name)
+        all_files_list.append(frame_1_1_name)
+        all_files_list.append(frame_1_2_name)
+        all_files_list.append(frame_1_3_name)
+        all_files_list.append(frame_1_4_name)
+        all_files_list.append(frame_1_5_name)
+        all_files_list.append(frame_1_6_name)
+        all_files_list.append(frame_1_7_name)
+        all_files_list.append(frame_2_name)
+
+    return all_files_list
+
+def warp(tenInput, tenFlow, backend):
     k = (str(tenFlow.device), str(tenFlow.size()))
+
     if k not in backwarp_tenGrid:
-        tenHorizontal = torch_linspace(-1.0, 1.0, tenFlow.shape[3], device = backend).view(1, 1, 1, 
-                                                              tenFlow.shape[3]).expand(tenFlow.shape[0], -1,  tenFlow.shape[2], -1)
-        tenVertical   = torch_linspace(-1.0, 1.0, tenFlow.shape[2], device = backend).view(1, 1, 
-                                                            tenFlow.shape[2], 1).expand(tenFlow.shape[0], -1, -1, tenFlow.shape[3])
+        tenHorizontal       = torch_linspace(-1.0, 1.0, tenFlow.shape[3], device = backend).view(1, 1, 1, tenFlow.shape[3]).expand(tenFlow.shape[0], -1,  tenFlow.shape[2], -1)
+        tenVertical         = torch_linspace(-1.0, 1.0, tenFlow.shape[2], device = backend).view(1, 1, tenFlow.shape[2], 1).expand(tenFlow.shape[0], -1, -1, tenFlow.shape[3])
         backwarp_tenGrid[k] = torch_cat([tenHorizontal, tenVertical], 1).to(backend, non_blocking = True)
 
-    tenFlow = torch_cat([tenFlow[:, 0:1, :, :] / ((tenInput.shape[3] - 1.0) / 2.0),
-                         tenFlow[:, 1:2, :, :] / ((tenInput.shape[2] - 1.0) / 2.0)], 1)
+    tenFlow = torch_cat([tenFlow[:, 0:1, :, :] / ((tenInput.shape[3] - 1.0) / 2.0), tenFlow[:, 1:2, :, :] / ((tenInput.shape[2] - 1.0) / 2.0)], 1)
 
     g = (backwarp_tenGrid[k] + tenFlow).permute(0, 2, 3, 1)
+
     return torch_nn_functional_grid_sample(input = tenInput, grid = g, mode = 'bilinear', padding_mode = 'border', align_corners = True)
 
 def conv(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
     return Sequential(
         Conv2d(in_planes, 
-                  out_planes, 
-                  kernel_size=kernel_size, 
-                  stride=stride,
-                  padding=padding, 
-                  dilation=dilation, bias=True),        
+                out_planes, 
+                kernel_size = kernel_size, 
+                stride      = stride,
+                padding     = padding, 
+                dilation    = dilation, 
+                bias        = True),        
         LeakyReLU(0.2, True)
     )
 
-def conv_bn(in_planes, out_planes, kernel_size=3, stride=1, padding=1, dilation=1):
-    return Sequential(
-        Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride,
-                  padding=padding, dilation=dilation, bias=False),
-        BatchNorm2d(out_planes),
-        LeakyReLU(0.2, True)
-    )
-    
 class ResConv(Module):
     def __init__(self, c, dilation=1):
         super(ResConv, self).__init__()
@@ -252,7 +346,7 @@ class IFBlock(Module):
         x = torch_nn_interpolate(x, scale_factor= 1. / scale, mode="bilinear", align_corners=False)
         if flow is not None:
             flow = torch_nn_interpolate(flow, scale_factor= 1. / scale, mode="bilinear", align_corners=False) * 1. / scale
-            x = torch_cat((x, flow), 1)
+            x    = torch_cat((x, flow), 1)
         feat = self.conv0(x)
         feat = self.convblock(feat)
         tmp  = self.lastconv(feat)
@@ -260,14 +354,18 @@ class IFBlock(Module):
         flow = tmp[:, :4] * scale
         mask = tmp[:, 4:5]
         return flow, mask
-     
-class IFNet_46(Module):
+    
+class IFNet_49(Module):
     def __init__(self, backend):
-        super(IFNet_46, self).__init__()
-        self.block0 = IFBlock(7,   c=192)
-        self.block1 = IFBlock(8+4, c=128)
-        self.block2 = IFBlock(8+4, c=96)
-        self.block3 = IFBlock(8+4, c=64)
+        super(IFNet_49, self).__init__()
+        self.block0 = IFBlock(7+8,   c=192)
+        self.block1 = IFBlock(8+4+8, c=128)
+        self.block2 = IFBlock(8+4+8, c=96)
+        self.block3 = IFBlock(8+4+8, c=64)
+        self.encode = Sequential(
+            Conv2d(3, 16, 3, 2, 1),
+            ConvTranspose2d(16, 4, 4, 2, 1)
+        )
 
         self.backend = backend
 
@@ -281,175 +379,59 @@ class IFNet_46(Module):
         else:
             timestep = timestep.repeat(1, 1, img0.shape[2], img0.shape[3])
 
-        flow_list = []
-        merged    = []
-        mask_list = []
+        f0 = self.encode(img0[:, :3])
+        f1 = self.encode(img1[:, :3])
+        flow_list   = []
+        merged      = []
+        mask_list   = []
         warped_img0 = img0
         warped_img1 = img1
         flow = None
         mask = None
         block = [self.block0, self.block1, self.block2, self.block3]
+
         for i in range(4):
             if flow is None:
-                flow, mask = block[i](torch_cat((img0[:, :3], img1[:, :3], timestep), 1), None, scale=scale_list[i])
+                flow, mask = block[i](torch_cat((img0[:, :3], img1[:, :3], f0, f1, timestep), 1), None, scale=scale_list[i])
             else:
-                f0, m0 = block[i](torch_cat((warped_img0[:, :3], warped_img1[:, :3], timestep, mask), 1), flow, scale=scale_list[i])                
-                flow = flow + f0
-                mask = mask + m0
+                fd, mask = block[i](torch_cat((warped_img0[:, :3], warped_img1[:, :3], warp(f0, flow[:, :2], self.backend), warp(f1, flow[:, 2:4], self.backend), timestep, mask), 1), flow, scale=scale_list[i])
+                flow = flow + fd
 
             mask_list.append(mask)
             flow_list.append(flow)
             warped_img0 = warp(img0, flow[:, :2], self.backend)
             warped_img1 = warp(img1, flow[:, 2:4], self.backend)
             merged.append((warped_img0, warped_img1))
-        mask_list[3] = torch_sigmoid(mask_list[3])
-        merged[3] = merged[3][0] * mask_list[3] + merged[3][1] * (1 - mask_list[3])
+
+        mask      = torch_sigmoid(mask)
+        merged[3] = (warped_img0 * mask + warped_img1 * (1 - mask))
 
         return flow_list, mask_list[3], merged
     
     def inference(self, img0, img1, timestep=0.5, scale=1.0):
-        imgs       = torch_cat((img0, img1), 1)
-        scale_list = [8/scale, 4/scale, 2/scale, 1/scale]
-        flow, mask, merged = self(imgs, timestep, scale_list)
+        imgs         = torch_cat((img0, img1), 1)
+        scale_list   = [8/scale, 4/scale, 2/scale, 1/scale]
+        _, _, merged = self(imgs, timestep, scale_list)
         return merged[3]
 
-def frames_to_tensors(frame_1, 
-                      frame_2, 
-                      backend, 
-                      half_precision):
+def frames_to_tensors(frame_1, frame_2, device):
+    tensor_1 = (torch_tensor(frame_1.transpose(2, 0, 1)).to(device, non_blocking=True) / 255.0).unsqueeze(0)
+    tensor_2 = (torch_tensor(frame_2.transpose(2, 0, 1)).to(device, non_blocking=True) / 255.0).unsqueeze(0)
 
-    if half_precision:
-        img_1 = (torch_tensor(frame_1.transpose(2, 0, 1)).half().to(backend, non_blocking = True) / 255.).unsqueeze(0)
-        img_2 = (torch_tensor(frame_2.transpose(2, 0, 1)).half().to(backend, non_blocking = True) / 255.).unsqueeze(0)
-    else:
-        img_1 = (torch_tensor(frame_1.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
-        img_2 = (torch_tensor(frame_2.transpose(2, 0, 1)).to(backend, non_blocking = True) / 255.).unsqueeze(0)
+    _, _, original_height, original_width = tensor_1.shape
 
-    _ , _ , h, w = img_1.shape
-    ph = ((h - 1) // 32 + 1) * 32
-    pw = ((w - 1) // 32 + 1) * 32
-    padding = (0, pw - w, 0, ph - h)
+    padded_height = ((original_height - 1) // 32 + 1) * 32
+    padded_width  = ((original_width - 1) // 32 + 1) * 32
 
-    img_1 = torch_nn_functional_pad(img_1, padding)
-    img_2 = torch_nn_functional_pad(img_2, padding)
+    padding = (0, padded_width - original_width, 0, padded_height - original_height)
 
-    return img_1, img_2, h, w
+    padded_tensor_1 = torch_nn_functional_pad(tensor_1, padding)
+    padded_tensor_2 = torch_nn_functional_pad(tensor_2, padding)
+
+    return padded_tensor_1, padded_tensor_2, original_height, original_width
 
 def tensor_to_frame(result, h, w):
     return (result[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
-
-def AI_generate_frames(frame1, 
-                        frame2, 
-                        frame_1_name,
-                        frame_2_name,
-                        frame_base_name,
-                        all_files_list,
-                        AI_model, 
-                        selected_output_file_extension, 
-                        backend, 
-                        half_precision,
-                        fluidification_factor):
-    
-    frames_to_generate = fluidification_factor - 1
-
-    with torch_no_grad():
-
-        first_frame_tensor, last_frame_tensor, h, w = frames_to_tensors(frame1, frame2, backend, half_precision)
-
-        if frames_to_generate == 1: 
-            # fluidification x2
-            middle_frame_name = frame_base_name + '_middle' + selected_output_file_extension
-
-            middle_frame_tensor = AI_model.inference(first_frame_tensor, last_frame_tensor)
-            middle_frame        = tensor_to_frame(middle_frame_tensor, h, w)
-            
-            image_write(frame_1_name, frame1)
-            image_write(middle_frame_name, middle_frame)
-            image_write(frame_2_name, frame2)
-
-            all_files_list.append(frame_1_name)
-            all_files_list.append(middle_frame_name)
-            all_files_list.append(frame_2_name)
-
-        elif frames_to_generate == 3: 
-            # fluidification x4
-            middle_frame_name      = frame_base_name + '_middle' + selected_output_file_extension
-            after_first_frame_name = frame_base_name + '_afterfirst' + selected_output_file_extension
-            prelast_frame_name     = frame_base_name + '_prelast' + selected_output_file_extension
-
-            middle_frame_tensor       = AI_model.inference(first_frame_tensor, last_frame_tensor)
-            after_first_frame_tensor  = AI_model.inference(first_frame_tensor, middle_frame_tensor)
-            prelast_frame_tensor      = AI_model.inference(middle_frame_tensor, last_frame_tensor)
-            
-            after_first_frame = tensor_to_frame(after_first_frame_tensor, h, w)
-            middle_frame      = tensor_to_frame(middle_frame_tensor, h, w)
-            prelast_frame     = tensor_to_frame(prelast_frame_tensor, h, w)
-
-            image_write(frame_1_name, frame1)
-            image_write(after_first_frame_name, after_first_frame)
-            image_write(middle_frame_name, middle_frame)
-            image_write(prelast_frame_name, prelast_frame)
-            image_write(frame_2_name, frame2)
-
-            all_files_list.append(frame_1_name)
-            all_files_list.append(after_first_frame_name)
-            all_files_list.append(middle_frame_name)
-            all_files_list.append(prelast_frame_name)
-            all_files_list.append(frame_2_name)
-
-        elif frames_to_generate == 7: 
-            # fluidification x8
-            frame_1_1_name      = frame_base_name + '_.1' + selected_output_file_extension
-            frame_1_2_name      = frame_base_name + '_.2' + selected_output_file_extension
-            frame_1_3_name      = frame_base_name + '_.3' + selected_output_file_extension
-            frame_1_4_name      = frame_base_name + '_.4' + selected_output_file_extension
-            frame_1_5_name      = frame_base_name + '_.5' + selected_output_file_extension
-            frame_1_6_name      = frame_base_name + '_.6' + selected_output_file_extension
-            frame_1_7_name      = frame_base_name + '_.7' + selected_output_file_extension
-
-            frame_1_4_tensor   = AI_model.inference(first_frame_tensor, last_frame_tensor)
-            frame_1_2_tensor   = AI_model.inference(first_frame_tensor, frame_1_4_tensor)
-            frame_1_1_tensor   = AI_model.inference(first_frame_tensor, frame_1_2_tensor)
-            frame_1_3_tensor   = AI_model.inference(frame_1_2_tensor, frame_1_4_tensor)
-
-            frame_1_6_tensor   = AI_model.inference(frame_1_4_tensor, last_frame_tensor)
-            frame_1_5_tensor   = AI_model.inference(frame_1_4_tensor, frame_1_6_tensor)
-            frame_1_7_tensor   = AI_model.inference(frame_1_6_tensor, last_frame_tensor)
-
-
-            frame_1_1 = tensor_to_frame(frame_1_1_tensor, h, w)
-            frame_1_2 = tensor_to_frame(frame_1_2_tensor, h, w)
-            frame_1_3 = tensor_to_frame(frame_1_3_tensor, h, w)
-            frame_1_4 = tensor_to_frame(frame_1_4_tensor, h, w)
-            frame_1_5 = tensor_to_frame(frame_1_5_tensor, h, w)
-            frame_1_6 = tensor_to_frame(frame_1_6_tensor, h, w)
-            frame_1_7 = tensor_to_frame(frame_1_7_tensor, h, w)
-
-            image_write(frame_1_name, frame1)
-
-            image_write(frame_1_1_name, frame_1_1)
-            image_write(frame_1_2_name, frame_1_2)
-            image_write(frame_1_3_name, frame_1_3)
-            image_write(frame_1_4_name, frame_1_4)
-            image_write(frame_1_5_name, frame_1_5)
-            image_write(frame_1_6_name, frame_1_6)
-            image_write(frame_1_7_name, frame_1_7)
-
-            image_write(frame_2_name, frame2)
-
-            all_files_list.append(frame_1_name)
-
-            all_files_list.append(frame_1_1_name)
-            all_files_list.append(frame_1_2_name)
-            all_files_list.append(frame_1_3_name)
-            all_files_list.append(frame_1_4_name)
-            all_files_list.append(frame_1_5_name)
-            all_files_list.append(frame_1_6_name)
-            all_files_list.append(frame_1_7_name)
-
-            all_files_list.append(frame_2_name)
-
-        return all_files_list
 
 
 
@@ -681,62 +663,44 @@ def read_log_file():
     log_file.close()
     return step
 
-def image_write(file_path, file_data): 
-    opencv_imwrite(file_path, file_data)
-
-def image_read(file_path, flags = IMREAD_UNCHANGED): 
-    return opencv_imread(file_path, flags)
-
 def remove_file(name_file): 
     if os_path_exists(name_file): 
         os_remove(name_file)
 
 def remove_dir(name_dir):
     if os_path_exists(name_dir): 
-        rmtree(name_dir)
+        remove_directory(name_dir)
 
 def create_dir(name_dir):
     if os_path_exists(name_dir):     
-        rmtree(name_dir)
+        remove_directory(name_dir)
     if not os_path_exists(name_dir): 
         os_makedirs(name_dir, mode=0o777)
 
-def prepare_output_video_filename(video_path, 
-                                  fluidification_factor, 
-                                  slowmotion, 
-                                  resize_factor, 
-                                  selected_video_output):
-    
-    result_video_path = os_path_splitext(video_path)[0]
 
-    resize_percentage = str(int(resize_factor * 100)) + "%"
-    
-    if slowmotion: to_append = f"_RIFEx{str(fluidification_factor)}_slowmo_{resize_percentage}{selected_video_output}"
-    else:          to_append = f"_RIFEx{str(fluidification_factor)}_{resize_percentage}{selected_video_output}"
 
-    result_video_path = result_video_path + to_append
+# Image/video Utils functions ------------------------
 
-    return result_video_path
+def image_write(file_path, file_data): 
+    _, file_extension = os_path_splitext(file_path)
+    opencv_imencode(file_extension, file_data)[1].tofile(file_path)
 
-def prepare_output_directory_name(video_path, 
-                                  fluidification_factor, 
-                                  resize_factor):
-    
-    result_video_path = os_path_splitext(video_path)[0]
+def image_read(file_path, flags = IMREAD_UNCHANGED): 
+    with open(file_path, 'rb') as file:
+        image_data = file.read()
+        image = opencv_imdecode(numpy_frombuffer(image_data, uint8), flags)
+        return image
 
-    resize_percentage = str(int(resize_factor * 100)) + "%"
-    
-    to_append = f"_RIFEx{str(fluidification_factor)}_{resize_percentage}"
+def resize_frames(frame_1, frame_2, resize_factor, target_width, target_height):
 
-    result_video_path = result_video_path + to_append
-
-    return result_video_path
-
-def resize_frames(frame_1, frame_2, target_width, target_height):
-    frame_1_resized = opencv_resize(frame_1, (target_width, target_height), interpolation = resize_algorithm)    
-    frame_2_resized = opencv_resize(frame_2, (target_width, target_height), interpolation = resize_algorithm)    
-
-    return frame_1_resized, frame_2_resized
+    if resize_factor == 1: 
+        frame_1_resized = frame_1   
+        frame_2_resized = frame_2
+        return frame_1_resized, frame_2_resized
+    else: 
+        frame_1_resized = opencv_resize(frame_1, (target_width, target_height), interpolation = INTER_LINEAR)    
+        frame_2_resized = opencv_resize(frame_2, (target_width, target_height), interpolation = INTER_LINEAR)
+        return frame_1_resized, frame_2_resized
 
 def extract_video_frames_and_audio(video_path, file_number):
     video_frames_list = []
@@ -746,20 +710,19 @@ def extract_video_frames_and_audio(video_path, file_number):
 
     video_file_clip = VideoFileClip(video_path)
     
-    # Extract audio
     try: 
         update_process_status(f"{file_number}. Extracting video audio")
         video_file_clip.audio.write_audiofile(audio_path, verbose = False, logger = None)
     except:
         pass
 
-    # Extract frames
     update_process_status(f"{file_number}. Extracting video frames")
     video_frames_list = video_file_clip.write_images_sequence(frame_sequence, verbose = False, logger = None, fps = frame_rate)
     
     return video_frames_list
 
 def video_reconstruction_by_frames(input_video_path, 
+                                    file_number,
                                     all_files_list, 
                                     fluidification_factor,
                                     slowmotion,
@@ -767,31 +730,35 @@ def video_reconstruction_by_frames(input_video_path,
                                     cpu_number,
                                     selected_video_extension):
     
-    # Find original video FPS
+    update_process_status(f"{file_number}. Processing upscaled video")
+
     cap = opencv_VideoCapture(input_video_path)
-    if slowmotion: frame_rate = cap.get(CAP_PROP_FPS)
-    else:          frame_rate = cap.get(CAP_PROP_FPS) * fluidification_factor
+    if slowmotion: 
+        frame_rate = cap.get(CAP_PROP_FPS)
+    else:          
+        frame_rate = cap.get(CAP_PROP_FPS) * fluidification_factor
     cap.release()
 
     # Choose the appropriate codec
-    if selected_video_extension == '.mp4':   
+    if selected_video_extension == '.mp4 (x264)':  
+        selected_video_extension = '.mp4'
         codec = 'libx264'
+    elif selected_video_extension == '.mp4 (x265)':  
+        selected_video_extension = '.mp4'
+        codec = 'libx265'
     elif selected_video_extension == '.avi': 
+        selected_video_extension = '.avi' 
         codec = 'png'
 
-    audio_file = app_name + "_temp" + os_separator + "audio.mp3"
-    upscaled_video_path = prepare_output_video_filename(input_video_path, 
-                                                        fluidification_factor, 
-                                                        slowmotion, 
-                                                        resize_factor, 
-                                                        selected_video_extension)
+    upscaled_video_path = prepare_output_video_filename(input_video_path, fluidification_factor, slowmotion, resize_factor, selected_video_extension)
 
     clip = ImageSequenceClip.ImageSequenceClip(all_files_list, fps = frame_rate)
-    if os_path_exists(audio_file) and slowmotion != True:
+    if os_path_exists(audio_path):
         clip.write_videofile(upscaled_video_path,
                             fps     = frame_rate,
-                            audio   = audio_file,
+                            audio   = audio_path,
                             codec   = codec,
+                            bitrate = '12M',
                             verbose = False,
                             logger  = None,
                             threads = cpu_number)
@@ -799,9 +766,35 @@ def video_reconstruction_by_frames(input_video_path,
         clip.write_videofile(upscaled_video_path,
                              fps     = frame_rate,
                              codec   = codec,
+                             bitrate = '12M',
                              verbose = False,
                              logger  = None,
                              threads = cpu_number)      
+
+def calculate_time_to_complete_video(start_timer, 
+                                     end_timer, 
+                                     how_many_frames, 
+                                     index_frame):
+    
+    seconds_for_frame = round(end_timer - start_timer, 2)
+    frames_left       = how_many_frames - (index_frame + 1)
+    seconds_left      = seconds_for_frame * frames_left
+
+    hours_left   = seconds_left // 3600
+    minutes_left = (seconds_left % 3600) // 60
+    seconds_left = round((seconds_left % 3600) % 60)
+
+    time_left = ""
+
+    if int(hours_left)   > 0: time_left = f"{int(hours_left):02d}h"
+    if int(minutes_left) > 0: time_left = f"{time_left}{int(minutes_left):02d}m"
+    if seconds_left      > 0: time_left = f"{time_left}{seconds_left:02d}s"
+
+    return time_left     
+
+def copy_files_from_temp_directory(file_number, destination_dir):
+    update_process_status(f"{file_number}. Saving video frames")
+    copytree(f"{app_name}_temp", destination_dir)
 
 
 
@@ -877,7 +870,6 @@ def fludify_button_command():
         print(f"> Starting fluidify:")
         print(f"   Files to fluidify: {len(selected_file_list)}")
         print(f"   Selected fluidify option: {selected_fluidity_option}")
-        print(f"   AI half precision: {half_precision}")
         print(f"   Selected GPU: {directml_device_name(selected_AI_device)}")
         print(f"   Selected image output extension: {selected_image_extension}")
         print(f"   Selected video output extension: {selected_video_extension}")
@@ -899,12 +891,42 @@ def fludify_button_command():
                                                     selected_video_extension,
                                                     resize_factor,
                                                     cpu_number,
-                                                    half_precision,
                                                     selected_save_frames))
         process_fluidify_orchestrator.start()
 
         thread_wait = Thread(target = check_fluidify_steps, daemon = True)
         thread_wait.start()
+
+def prepare_output_video_filename(video_path, 
+                                  fluidification_factor, 
+                                  slowmotion, 
+                                  resize_factor, 
+                                  selected_video_output):
+    
+    result_video_path = os_path_splitext(video_path)[0]
+
+    resize_percentage = str(int(resize_factor * 100)) + "%"
+    
+    if slowmotion: to_append = f"_RIFEx{str(fluidification_factor)}_slowmo_{resize_percentage}{selected_video_output}"
+    else:          to_append = f"_RIFEx{str(fluidification_factor)}_{resize_percentage}{selected_video_output}"
+
+    result_video_path = result_video_path + to_append
+
+    return result_video_path
+
+def prepare_output_directory_name(video_path, 
+                                  fluidification_factor, 
+                                  resize_factor):
+    
+    result_video_path = os_path_splitext(video_path)[0]
+
+    resize_percentage = str(int(resize_factor * 100)) + "%"
+    
+    to_append = f"_RIFEx{str(fluidification_factor)}_{resize_percentage}"
+
+    result_video_path = result_video_path + to_append
+
+    return result_video_path
 
 def check_fluidification_option(selected_fluidity_option):
     slowmotion = False
@@ -918,31 +940,6 @@ def check_fluidification_option(selected_fluidity_option):
 
     return fluidification_factor, slowmotion
 
-def calculate_time_to_complete_video(start_timer, 
-                                     end_timer, 
-                                     how_many_frames, 
-                                     index_frame):
-    
-    seconds_for_frame = round(end_timer - start_timer, 2)
-    frames_left       = how_many_frames - (index_frame + 1)
-    seconds_left      = seconds_for_frame * frames_left
-
-    hours_left   = seconds_left // 3600
-    minutes_left = (seconds_left % 3600) // 60
-    seconds_left = round((seconds_left % 3600) % 60)
-
-    time_left = ""
-
-    if int(hours_left)   > 0: time_left = f"{int(hours_left):02d}h"
-    if int(minutes_left) > 0: time_left = f"{time_left}{int(minutes_left):02d}m"
-    if seconds_left      > 0: time_left = f"{time_left}{seconds_left:02d}s"
-
-    return time_left     
-
-def copy_files_from_temp_directory(file_number, destination_dir):
-    update_process_status(f"{file_number}. Saving video frames")
-    copytree(f"{app_name}_temp", destination_dir)
-
 def fluidify_video(video_path, 
                    file_number,
                    AI_model, 
@@ -953,7 +950,6 @@ def fluidify_video(video_path,
                    selected_image_extension, 
                    selected_video_extension,
                    cpu_number, 
-                   half_precision,
                    selected_save_frames):
         
     create_dir(f"{app_name}_temp")
@@ -981,8 +977,7 @@ def fluidify_video(video_path,
         frame_1 = image_read(frame_list[index_frame])
         frame_2 = image_read(frame_list[index_frame + 1])
 
-        if resize_factor != 1: 
-            frame_1, frame_2 = resize_frames(frame_1, frame_2, target_width, target_height)
+        frame_1, frame_2 = resize_frames(frame_1, frame_2, resize_factor, target_width, target_height)
 
         all_files_list = AI_generate_frames(frame_1, 
                                             frame_2, 
@@ -993,7 +988,6 @@ def fluidify_video(video_path,
                                             AI_model, 
                                             selected_image_extension, 
                                             backend, 
-                                            half_precision, 
                                             fluidification_factor)
         done_frames += 1
 
@@ -1004,15 +998,14 @@ def fluidify_video(video_path,
         
             update_process_status(f"{file_number}. Fluidifying video {percent_complete:.2f}% ({time_left})")
             
-    all_files_list = list(dict.fromkeys(all_files_list)) # Remove duplicated frames from list
+    all_files_list = list(dict.fromkeys(all_files_list))
 
     if selected_save_frames:
         save_directory = prepare_output_directory_name(video_path, fluidification_factor, resize_factor)
         copy_files_from_temp_directory(file_number, save_directory)
 
-
-    update_process_status(f"{file_number}. Processing fluidified video")
     video_reconstruction_by_frames(video_path, 
+                                   file_number,
                                    all_files_list, 
                                    fluidification_factor, 
                                    slowmotion, 
@@ -1027,15 +1020,14 @@ def fluidify_orchestrator(selected_file_list,
                         selected_video_extension,
                         resize_factor,
                         cpu_number,
-                        half_precision,
                         selected_save_frames):
     
-    torch_set_num_threads(1)
+    torch_set_num_threads(2)
     
     fluidification_factor, slowmotion = check_fluidification_option(selected_fluidity_option)
 
     try:
-        AI_model = load_AI_model(backend, half_precision)
+        AI_model = load_AI_model(backend)
 
         for file_number, file_path in enumerate(selected_file_list, 0):
             file_number = file_number + 1
@@ -1049,7 +1041,6 @@ def fluidify_orchestrator(selected_file_list,
                             selected_image_extension, 
                             selected_video_extension,
                             cpu_number,
-                            half_precision,
                             selected_save_frames)
 
         update_process_status(f"All files completed! :)")
@@ -1125,29 +1116,17 @@ def extract_video_info(video_file):
         break
     cap.release()
 
-    video_label = ( "VIDEO" + " • " + video_name + " • " + str(width) + "x" 
-                   + str(height) + " • " + str(minutes) + 'm:' 
-                   + str(round(seconds)) + "s • " + str(num_frames) 
-                   + "frames • " + str(round(frame_rate)) + "fps" )
+    video_label = f"VIDEO • {video_name} • {width}x{height} • {minutes}m:{round(seconds)}s • {num_frames}frames • {round(frame_rate, 2)}fps"
 
     ctkimage = CTkImage(pillow_image_open("temp.jpg"), size = (25, 25))
     
     return video_label, ctkimage
 
 def check_if_file_is_video(file):
-    for video_extension in supported_video_extensions:
-        if video_extension in file:
-            return True
+    return any(video_extension in file for video_extension in supported_video_extensions)
 
 def check_supported_selected_files(uploaded_file_list):
-    supported_files_list = []
-
-    for file in uploaded_file_list:
-        for supported_extension in supported_file_extensions:
-            if supported_extension in file:
-                supported_files_list.append(file)
-
-    return supported_files_list
+    return [file for file in uploaded_file_list if any(supported_extension in file for supported_extension in supported_file_extensions)]
 
 def show_error_message(exception):
     messageBox_title = "Upscale error"
@@ -1560,7 +1539,7 @@ if __name__ == "__main__":
 
     info_message.set("Hi :)")
 
-    selected_resize_factor.set("50")
+    selected_resize_factor.set("70")
     cpu_count = str(int(os_cpu_count()/2))
     selected_cpu_number.set(cpu_count)
 
