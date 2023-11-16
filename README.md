@@ -10,7 +10,7 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/9c8c1b7d-611b-45f2-bd7e-d2645ff15fe7"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/2713229c-5b61-4bf3-9685-6a811b4df59c"> </a> 
 </div>
 
 ## What is FluidFrames.RIFE?
