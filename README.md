@@ -10,15 +10,15 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/2713229c-5b61-4bf3-9685-6a811b4df59c"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/3cfa7e44-3a19-4163-9153-82ac0af8d1cc"> </a> 
 </div>
 
 ## What is FluidFrames.RIFE?
-FluidFrames.RIFE is a Windows app powered by RIFE-HDv3 AI to fluidify videos and to create slowmotion videos.
+FluidFrames.RIFE is a Windows app powered by RIFE-HD AI to fluidify videos and to create slowmotion videos.
 
 ## Other AI projects.🤓
-- https://github.com/Djdefrag/QualityScaler / QualityScaler - image/video AI upscaler app (BSRGAN)
-- https://github.com/Djdefrag/RealESRScaler / RealESRScaler - image/video AI upscaler app (Real-ESRGAN)
+- https://github.com/Djdefrag/QualityScaler / QualityScaler - image/video AI upscaler app
+- https://github.com/Djdefrag/RealScaler / RealScaler - image/video AI upscaler app (Real-ESRGAN)
 
 ## Credits.
 - RIFE - https://github.com/megvii-research/ECCV2022-RIFE
@@ -31,7 +31,7 @@ External packages are:
 - AI  -> torch / torch-directml
 - GUI -> customtkinter
 - Image/video -> openCV / moviepy
-- Packaging   -> pyinstaller
+- Packaging   -> nuitka
 
 ## Requirements. 🤓
 - [ ] Windows 11 / Windows 10
@@ -65,6 +65,8 @@ External packages are:
     - [x] New, completely redesigned graphical interface based on @customtkinter
     - [x] Fluidify multiple videos at once
     - [x] Save AI generated frames as files
+    - [x] Support RIFE AI model updates
+    - [x] Support for RIFE_Lite AI model (a faster and lighter version of RIFE) 
     - [ ] Python 3.11 (expecting ~30% more performance)
     - [ ] Torch/torch-directml 2.0 (expecting ~20% more performance)
 
