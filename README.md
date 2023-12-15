@@ -13,6 +13,7 @@
     <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/3cfa7e44-3a19-4163-9153-82ac0af8d1cc"> </a> 
 </div>
 
+
 ## What is FluidFrames.RIFE?
 FluidFrames.RIFE is a Windows app powered by RIFE-HD AI to fluidify videos and to create slowmotion videos.
 
