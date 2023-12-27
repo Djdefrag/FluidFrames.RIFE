@@ -1,7 +1,7 @@
 <div align="center">
     <br>
     <img src="https://user-images.githubusercontent.com/32263112/216588514-0ad68175-c65e-47ee-9ca8-d163572d9be9.png" width="175"> </a> 
-    <br><br>FluidFrames.RIFE | video AI interpolation app <br><br>
+    <br><br>FluidFrames.RIFE | video AI frame generation app <br><br>
     <a href="https://jangystudio.itch.io/fluidframesrife">
          <button>
             <img src="https://static.itch.io/images/badge-color.svg" width="225" height="70">
