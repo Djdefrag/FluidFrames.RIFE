@@ -10,12 +10,12 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/3cfa7e44-3a19-4163-9153-82ac0af8d1cc"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/a4113e5f-68e7-484e-ba2f-0d78cfcdc4f3"> </a> 
 </div>
 
 
 ## What is FluidFrames.RIFE?
-FluidFrames.RIFE is a Windows app powered by RIFE-HD AI to fluidify videos and to create slowmotion videos.
+FluidFrames.RIFE is a Windows app powered by RIFE AI to fluidify videos and to create slowmotion videos.
 
 ## Other AI projects.🤓
 - https://github.com/Djdefrag/QualityScaler / QualityScaler - image/video AI upscaler app
@@ -41,7 +41,7 @@ External packages are:
 
 ## Features.
 - [x] Elegant and easy to use GUI
-- [x] Video frames interpolation x2 / x4 / x8
+- [x] Video frames generation x2 / x4 / x8
    - 30fps => x2 => 60fps
    - 30fps => x4 => 120fps
    - 30fps => x8 => 240fps
@@ -62,7 +62,7 @@ External packages are:
     - [x] Multi GPU support (for pc with double GPU, integrated + dedicated)
     - [x] Python 3.10 (expecting ~10% more performance)
     - [x] Slowmotion function
-- [ ] 2.X versions (now under development)
+- [x] 2.X versions
     - [x] New, completely redesigned graphical interface based on @customtkinter
     - [x] Fluidify multiple videos at once
     - [x] Save AI generated frames as files
@@ -70,6 +70,10 @@ External packages are:
     - [x] Support for RIFE_Lite AI model (a faster and lighter version of RIFE) 
     - [ ] Python 3.11 (expecting ~30% more performance)
     - [ ] Torch/torch-directml 2.0 (expecting ~20% more performance)
+- [ ] 3.x versions (now under development)
+    - [ ] New AI engine powered by onnxruntime-directml (https://pypi.org/project/onnxruntime-directml/)
+    - [ ] Python 3.11 (~25% performance improvements)
+    - [ ] Video frame generation pause and restart  
 
 
 ### Some Examples.
