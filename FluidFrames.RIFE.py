@@ -1,27 +1,27 @@
 
 # Standard library imports
 import sys
-from timeit import default_timer as timer
-from time import sleep
-from threading import Thread
+from functools  import cache
+from time       import sleep
 from webbrowser import open as open_browser
+from shutil     import rmtree as remove_directory
+from timeit     import default_timer as timer
 
+from typing import Callable
+from threading import Thread
+from multiprocessing.pool import ThreadPool
 from multiprocessing import ( 
     Process, 
     Queue          as multiprocessing_Queue,
     freeze_support as multiprocessing_freeze_support
 )
 
-from shutil import ( 
-    rmtree as remove_directory,
-)
-
 from os import (
-    sep         as os_separator,
-    devnull     as os_devnull,
-    cpu_count   as os_cpu_count,
-    makedirs    as os_makedirs,
-    remove      as os_remove,
+    sep       as os_separator,
+    devnull   as os_devnull,
+    environ   as os_environ,
+    cpu_count as os_cpu_count,
+    makedirs  as os_makedirs,
 )
 
 from os.path import (
@@ -32,52 +32,18 @@ from os.path import (
     splitext as os_path_splitext
 )
 
-
 # Third-party library imports
-
 from PIL.Image import (
     open      as pillow_image_open,
     fromarray as pillow_image_fromarray
 )
 
-from moviepy.editor   import VideoFileClip
-from moviepy.video.io import ImageSequenceClip
+from moviepy.editor import VideoFileClip 
+from moviepy.video.io import ImageSequenceClip 
 
-from torch import (
-    device          as torch_device,
-    inference_mode  as torch_inference_mode,
-    linspace        as torch_linspace,
-    cat             as torch_cat,
-    load            as torch_load,
-    ones            as torch_ones,
-    set_num_threads as torch_set_num_threads,
-    is_tensor       as torch_is_tensor,
-    sigmoid         as torch_sigmoid,
-    tensor          as torch_tensor,
-)
-
-from torch.nn.functional import (
-    interpolate as torch_nn_interpolate,
-    grid_sample as torch_nn_functional_grid_sample,
-    pad         as torch_nn_functional_pad
-)
-
-from torch.nn import (
-    ConvTranspose2d,
-    Sequential,
-    Conv2d,
-    Module,
-    Parameter,
-    PixelShuffle,
-    LeakyReLU,
-)
-
-from torch_directml import (
-    device       as directml_device,
-    device_count as directml_device_count,
-    device_name  as directml_device_name,
-    gpu_memory   as directml_gpu_memory,
-    has_float64_support as directml_has_float64_support
+from onnx import load as onnx_load 
+from onnxruntime import (
+    InferenceSession as onnxruntime_inferenceSession 
 )
 
 from cv2 import (
@@ -88,7 +54,6 @@ from cv2 import (
     COLOR_BGR2RGB,
     IMREAD_UNCHANGED,
     INTER_LINEAR,
-    INTER_CUBIC,
     VideoCapture as opencv_VideoCapture,
     cvtColor     as opencv_cvtColor,
     imdecode     as opencv_imdecode,
@@ -98,8 +63,17 @@ from cv2 import (
 )
 
 from numpy import (
-    ndarray     as numpy_ndarray,
-    frombuffer  as numpy_frombuffer,
+    ndarray           as numpy_ndarray,
+    ascontiguousarray as numpy_ascontiguousarray,
+    frombuffer        as numpy_frombuffer,
+    concatenate       as numpy_concatenate, 
+    transpose         as numpy_transpose,
+    expand_dims       as numpy_expand_dims,
+    squeeze           as numpy_squeeze,
+    clip              as numpy_clip,
+    mean              as numpy_mean,
+    concatenate       as numpy_concatenate,
+    float32,
     uint8
 )
 
@@ -120,36 +94,48 @@ from customtkinter import (
     set_default_color_theme,
 )
 
+if sys.stdout is None: sys.stdout = open(os_devnull, "w")
+if sys.stderr is None: sys.stderr = open(os_devnull, "w")
+
 
 app_name     = "FluidFrames"
 second_title = "RIFE"
-version      = "2.13"
+version      = "3.3"
 
 dark_color   = "#080808"
 
 githubme   = "https://github.com/Djdefrag/FluidFrames.RIFE"
 telegramme = "https://linktr.ee/j3ngystudio"
 
-AI_models_list = [ 'RIFE_4.13', 'RIFE_4.13_Lite' ]
-fluidity_options_list = [ 
-    'x2', 'x4', 'x8',
-    'x2-slowmotion', 'x4-slowmotion', 'x8-slowmotion' 
-    ]
+AI_models_list                = [ 'RIFE_4.13', 'RIFE_4.13_Lite' ]
+frame_generation_options_list = [ 'x2', 'x4', 'x8', 'x2-slowmotion', 'x4-slowmotion', 'x8-slowmotion' ]
+gpus_list                     = [ 'High performance', 'Power saving']
+image_extension_list          = [ '.jpg', '.png', '.bmp', '.tiff' ]
+video_extension_list          = [ '.mp4 (x264)', '.mp4 (x265)', '.avi' ]
+save_frames_list              = [ 'Enabled', 'Disabled' ]
+AI_precision_list             = [ 'Full precision', 'Half precision' ]
 
-image_extension_list  = [ '.jpg', '.png', '.bmp', '.tiff' ]
-video_extension_list  = [ '.mp4 (x264)', '.mp4 (x265)', '.avi' ]
-save_frames_list      = [ 'Enabled', 'Disabled' ]
+default_AI_model                = AI_models_list[0]
+default_gpu                     = gpus_list[0]
+default_frame_generation_option = frame_generation_options_list[0]
+default_image_extension         = image_extension_list[0]
+default_video_extension         = video_extension_list[0]
+default_save_frames             = save_frames_list[0]
+default_resize_factor           = str(50)
+default_VRAM_limiter            = str(8)
+default_cpu_number              = str(int(os_cpu_count()/2))
 
-offset_y_options = 0.125
-row0_y           = 0.56
-row1_y           = row0_y + offset_y_options
-row2_y           = row1_y + offset_y_options
-row3_y           = row2_y + offset_y_options
+offset_y_options = 0.105
+row0_y = 0.52
+row1_y = row0_y + offset_y_options
+row2_y = row1_y + offset_y_options
+row3_y = row2_y + offset_y_options
+row4_y = row3_y + offset_y_options
 
 offset_x_options = 0.28
-column1_x        = 0.5
-column0_x        = column1_x - offset_x_options
-column2_x        = column1_x + offset_x_options
+column1_x = 0.5
+column0_x = column1_x - offset_x_options
+column2_x = column1_x + offset_x_options
 
 COMPLETED_STATUS = "Completed"
 ERROR_STATUS = "Error"
@@ -166,7 +152,8 @@ supported_file_extensions = ['.mp4', '.MP4',
                             '.m4v', ',M4V',
                             '.avi', '.AVI',
                             '.mov', '.MOV',
-                            '.qt', '.3gp', '.mpg', '.mpeg']
+                            '.qt', '.3gp', 
+                            '.mpg', '.mpeg']
 
 supported_video_extensions  = ['.mp4', '.MP4',
                                 '.webm', '.WEBM',
@@ -176,271 +163,91 @@ supported_video_extensions  = ['.mp4', '.MP4',
                                 '.m4v', ',M4V',
                                 '.avi', '.AVI',
                                 '.mov', '.MOV',
-                                '.qt', '.3gp', '.mpg', '.mpeg']
+                                '.qt', '.3gp', 
+                                '.mpg', '.mpeg']
 
 
 
 # ------------------ AI ------------------
 
-class Head(Module):
-    def __init__(self):
-        super(Head, self).__init__()
-        self.cnn0 = Conv2d(3, 32, 3, 2, 1)
-        self.cnn1 = Conv2d(32, 32, 3, 1, 1)
-        self.cnn2 = Conv2d(32, 32, 3, 1, 1)
-        self.cnn3 = ConvTranspose2d(32, 8, 4, 2, 1)
-        self.relu = LeakyReLU(0.2, True)
-
-    def forward(self, x, feat=False):
-        x0 = self.cnn0(x)
-        x = self.relu(x0)
-        x1 = self.cnn1(x)
-        x = self.relu(x1)
-        x2 = self.cnn2(x)
-        x = self.relu(x2)
-        x3 = self.cnn3(x)
-        if feat:
-            return [x0, x1, x2, x3]
-        return x3
-
-class ResConv(Module):
-    def __init__(self, c, dilation=1):
-        super(ResConv, self).__init__()
-        self.conv = Conv2d(c, c, 3, 1, dilation, dilation=dilation, groups=1)
-        self.beta = Parameter(torch_ones((1, c, 1, 1)), requires_grad=True)
-        self.relu = LeakyReLU(0.2, True)
-
-    def forward(self, x):
-        return self.relu(self.conv(x) * self.beta + x)
-
-class IFBlock(Module):
-    def __init__(self, in_planes, c=64):
-        super(IFBlock, self).__init__()
-
-        self.conv0 = Sequential(
-            Sequential(Conv2d(in_planes, c//2, 3, 2, 1, bias=True), LeakyReLU(0.2, True)),
-            Sequential(Conv2d(c//2, c, 3, 2, 1, bias=True), LeakyReLU(0.2, True))
-        )
-        self.convblock = Sequential(
-            ResConv(c),
-            ResConv(c),
-            ResConv(c),
-            ResConv(c),
-            ResConv(c),
-            ResConv(c),
-            ResConv(c),
-            ResConv(c),
-        )
-        self.lastconv = Sequential(
-            ConvTranspose2d(c, 4*6, 4, 2, 1),
-            PixelShuffle(2)
-        )
-
-    def forward(self, x, flow=None, scale=1):
-        x = torch_nn_interpolate(x, scale_factor= 1. / scale, mode="bilinear", align_corners=False)
-        if flow is not None:
-            flow = torch_nn_interpolate(flow, scale_factor= 1. / scale, mode="bilinear", align_corners=False) * 1. / scale
-            x    = torch_cat((x, flow), 1)
-        feat = self.conv0(x)
-        feat = self.convblock(feat)
-        tmp  = self.lastconv(feat)
-        tmp  = torch_nn_interpolate(tmp, scale_factor=scale, mode="bilinear", align_corners=False)
-        flow = tmp[:, :4] * scale
-        mask = tmp[:, 4:5]
-        return flow, mask
-
-class RIFE_413(Module):
-    def __init__(self, backend):
-        super(RIFE_413, self).__init__()
-        self.block0 = IFBlock(7+16, c=192)
-        self.block1 = IFBlock(8+4+16, c=128)
-        self.block2 = IFBlock(8+4+16, c=96)
-        self.block3 = IFBlock(8+4+16, c=64)
-        self.encode = Head()   
-
-        self.backend = backend     
-
-    def forward(self, x, timestep=0.5, scale_list=[8, 4, 2, 1]):
-        channel = x.shape[1] // 2
-        img0 = x[:, :channel]
-        img1 = x[:, channel:]
-
-        if not torch_is_tensor(timestep):
-            timestep = (x[:, :1].clone() * 0 + 1) * timestep
-        else:
-            timestep = timestep.repeat(1, 1, img0.shape[2], img0.shape[3])
-
-        f0 = self.encode(img0[:, :3])
-        f1 = self.encode(img1[:, :3])
-        flow_list = []
-        merged    = []
-        mask_list = []
-        warped_img0 = img0
-        warped_img1 = img1
-        flow = None
-        mask = None
-        block = [self.block0, self.block1, self.block2, self.block3]
-        for i in range(4):
-            if flow is None:
-                flow, mask = block[i](torch_cat((img0[:, :3], img1[:, :3], f0, f1, timestep), 1), None, scale=scale_list[i])
-            else:
-                wf0 = self.warp(f0, flow[:, :2])
-                wf1 = self.warp(f1, flow[:, 2:4])
-                fd, m0 = block[i](torch_cat((warped_img0[:, :3], warped_img1[:, :3], wf0, wf1, timestep, mask), 1), flow, scale=scale_list[i])
-                mask = m0
-                flow = flow + fd
-
-            mask_list.append(mask)
-            flow_list.append(flow)
-            warped_img0 = self.warp(img0, flow[:, :2])
-            warped_img1 = self.warp(img1, flow[:, 2:4])
-            merged.append((warped_img0, warped_img1))
-
-        mask = torch_sigmoid(mask)
-        merged[3] = (warped_img0 * mask + warped_img1 * (1 - mask))
-
-        return flow_list, mask_list[3], merged
-    
-    def warp(
-        self,
-        tenInput: any, 
-        tenFlow: any, 
-        ) -> torch_tensor:
-    
-        backwarp_tenGrid = {}
-
-        k = (str(tenFlow.device), str(tenFlow.size()))
-
-        if k not in backwarp_tenGrid:
-            tenHorizontal       = torch_linspace(-1.0, 1.0, tenFlow.shape[3], device = self.backend).view(1, 1, 1, tenFlow.shape[3]).expand(tenFlow.shape[0], -1,  tenFlow.shape[2], -1)
-            tenVertical         = torch_linspace(-1.0, 1.0, tenFlow.shape[2], device = self.backend).view(1, 1, tenFlow.shape[2], 1).expand(tenFlow.shape[0], -1, -1, tenFlow.shape[3])
-            backwarp_tenGrid[k] = torch_cat([tenHorizontal, tenVertical], 1).to(self.backend, non_blocking = True)
-
-        tenFlow = torch_cat([tenFlow[:, 0:1, :, :] / ((tenInput.shape[3] - 1.0) / 2.0), tenFlow[:, 1:2, :, :] / ((tenInput.shape[2] - 1.0) / 2.0)], 1)
-
-        g = (backwarp_tenGrid[k] + tenFlow).permute(0, 2, 3, 1)
-
-        return torch_nn_functional_grid_sample(input = tenInput, grid = g, mode = 'bilinear', padding_mode = 'border', align_corners = True)
-
-class RIFE_413_Lite(Module):
-
-    def __init__(self, backend):
-        super(RIFE_413_Lite, self).__init__()
-        self.block0 = IFBlock(7+8, c=128)
-        self.block1 = IFBlock(8+4+8, c=96)
-        self.block2 = IFBlock(8+4+8, c=64)
-        self.block3 = IFBlock(8+4+8, c=48)
-        self.encode = Sequential(
-            Conv2d(3, 32, 3, 2, 1),
-            LeakyReLU(0.2, True),
-            Conv2d(32, 32, 3, 1, 1),
-            LeakyReLU(0.2, True),
-            Conv2d(32, 32, 3, 1, 1),
-            LeakyReLU(0.2, True),
-            ConvTranspose2d(32, 4, 4, 2, 1)
-        )
-
-        self.backend = backend
-
-    def forward(self, x, timestep=0.5, scale_list=[8, 4, 2, 1]):
-        channel = x.shape[1] // 2
-        img0 = x[:, :channel]
-        img1 = x[:, channel:]
-
-        if not torch_is_tensor(timestep):
-            timestep = (x[:, :1].clone() * 0 + 1) * timestep
-        else:
-            timestep = timestep.repeat(1, 1, img0.shape[2], img0.shape[3])
-
-        f0 = self.encode(img0[:, :3])
-        f1 = self.encode(img1[:, :3])
-        flow_list = []
-        merged = []
-        mask_list = []
-        warped_img0 = img0
-        warped_img1 = img1
-        flow = None
-        mask = None
-        block = [self.block0, self.block1, self.block2, self.block3]
-
-        for i in range(4):
-            if flow is None:
-                flow, mask = block[i](torch_cat((img0[:, :3], img1[:, :3], f0, f1, timestep), 1), None, scale=scale_list[i])
-            else:
-                wf0 = self.warp(f0, flow[:, :2])
-                wf1 = self.warp(f1, flow[:, 2:4])
-                fd, m0 = block[i](torch_cat((warped_img0[:, :3], warped_img1[:, :3], wf0, wf1, timestep, mask), 1), flow, scale=scale_list[i])
-                mask = m0
-                flow = flow + fd
-
-            mask_list.append(mask)
-            flow_list.append(flow)
-            warped_img0 = self.warp(img0, flow[:, :2])
-            warped_img1 = self.warp(img1, flow[:, 2:4])
-            merged.append((warped_img0, warped_img1))
-
-        mask = torch_sigmoid(mask)
-        merged[3] = (warped_img0 * mask + warped_img1 * (1 - mask))
-
-        return flow_list, mask_list[3], merged
-    
-    def warp(
-        self,
-        tenInput: any, 
-        tenFlow: any, 
-        ) -> torch_tensor:
-    
-        backwarp_tenGrid = {}
-
-        k = (str(tenFlow.device), str(tenFlow.size()))
-
-        if k not in backwarp_tenGrid:
-            tenHorizontal       = torch_linspace(-1.0, 1.0, tenFlow.shape[3], device = self.backend).view(1, 1, 1, tenFlow.shape[3]).expand(tenFlow.shape[0], -1,  tenFlow.shape[2], -1)
-            tenVertical         = torch_linspace(-1.0, 1.0, tenFlow.shape[2], device = self.backend).view(1, 1, tenFlow.shape[2], 1).expand(tenFlow.shape[0], -1, -1, tenFlow.shape[3])
-            backwarp_tenGrid[k] = torch_cat([tenHorizontal, tenVertical], 1).to(self.backend, non_blocking = True)
-
-        tenFlow = torch_cat([tenFlow[:, 0:1, :, :] / ((tenInput.shape[3] - 1.0) / 2.0), tenFlow[:, 1:2, :, :] / ((tenInput.shape[2] - 1.0) / 2.0)], 1)
-
-        g = (backwarp_tenGrid[k] + tenFlow).permute(0, 2, 3, 1)
-
-        return torch_nn_functional_grid_sample(input = tenInput, grid = g, mode = 'bilinear', padding_mode = 'border', align_corners = True)
-
-@torch_inference_mode(True)
 def load_AI_model(
-        selected_AI_model: str,
-        backend: directml_device
-        ) -> any:
+        selected_AI_model: str, 
+        selected_gpu: str,
+    ) -> onnxruntime_inferenceSession:
 
-    def convert(param):
-        return {
-            k.replace("module.", ""): v
-            for k, v in param.items()
-            if "module." in k
-        }
+    AI_model_loaded = onnx_load(find_by_relative_path(f"AI-onnx{os_separator}{selected_AI_model}.onnx"))
 
-    model_path = find_by_relative_path(f"AI{os_separator}{selected_AI_model}.pkl")
-
-    if selected_AI_model == "RIFE_4.13":
-        model = RIFE_413(backend)
-    elif selected_AI_model == "RIFE_4.13_Lite":
-        model = RIFE_413_Lite(backend)
-
-    pretrained_model = torch_load(
-        model_path, 
-        map_location = torch_device('cpu')
-        )
+    match selected_gpu:
+        case "High performance":
+            providers = [('DmlExecutionProvider', {'performance_preference': 'high_performance'})]
+        case "Power saving":
+            providers = [('DmlExecutionProvider', {'performance_preference': 'minimum_power'})]
     
-    model.load_state_dict(convert(pretrained_model))
-    model.eval()
+    AI_model = onnxruntime_inferenceSession(
+        path_or_bytes = AI_model_loaded.SerializeToString(), 
+        providers = providers
+    )    
 
-    model.to(backend, non_blocking = True)
+    return AI_model
 
-    return model
+def concatenate_frames(
+        frame_1: numpy_ndarray, 
+        frame_2: numpy_ndarray, 
+    ) -> numpy_ndarray:
 
-@torch_inference_mode(True)
+    frame_1 = frame_1 / 255
+    frame_2 = frame_2 / 255
+
+    input_images = numpy_concatenate((frame_1, frame_2), axis=2)
+
+    return input_images
+
+def preprocess_image(image: numpy_ndarray) -> numpy_ndarray:
+    image_transposed          = numpy_transpose(image, (2, 0, 1))
+    image_transposed_expanded = numpy_expand_dims(image_transposed, axis=0)
+
+    return image_transposed_expanded
+
+def process_image_with_AI_model(
+        AI_model: onnxruntime_inferenceSession, 
+        image: numpy_ndarray
+        ) -> numpy_ndarray:
+    
+    onnx_input      = {AI_model.get_inputs()[0].name: image}
+    onnx_output     = AI_model.run(None, onnx_input)[0] 
+    output_squeezed = numpy_squeeze(onnx_output, axis=0)
+    output_squeezed_clamped = numpy_clip(output_squeezed, 0, 1)
+    output_squeezed_clamped_transposed = numpy_transpose(output_squeezed_clamped, (1, 2, 0)).astype(float32)
+
+    return output_squeezed_clamped_transposed
+
+def AI_interpolation(
+    AI_model: onnxruntime_inferenceSession, 
+    frame_1: numpy_ndarray,
+    frame_2: numpy_ndarray
+    ) -> numpy_ndarray:
+
+    concatenated_frames = concatenate_frames(frame_1, frame_2).astype(float32)
+    AI_input  = numpy_ascontiguousarray(concatenated_frames)
+    AI_input  = preprocess_image(AI_input)
+    AI_output = process_image_with_AI_model(AI_model, AI_input)
+    output_frame = (AI_output * 255).astype(uint8)
+    
+    return output_frame
+
+def save_multiple_frames_async(
+    frames_to_save: list[numpy_ndarray],
+    frame_paths_to_save: list[str]
+    ) -> None:
+    
+    for index in range(len(frames_to_save)):
+        image_write(
+            frame_paths_to_save[index], 
+            frames_to_save[index]
+        )
+
 def AI_generate_frames(
-        AI_model: any,
-        backend: directml_device,
+        AI_model: onnxruntime_inferenceSession,
         frame1: numpy_ndarray, 
         frame2: numpy_ndarray, 
         frame_1_name: str,
@@ -453,21 +260,17 @@ def AI_generate_frames(
     
     frames_to_generate = fluidification_factor - 1
 
-    frame_1_tensor, frame_2_tensor, h, w = frames_to_tensors(frame1, frame2, backend)
+    frames_to_save = []
+    frame_paths_to_save = []
 
     if frames_to_generate == 1: 
         # fluidification x2
         frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
-
-        frame_1_1 = tensor_to_frame(AI_interpolation(AI_model, frame_1_tensor, frame_2_tensor), h, w)
+        frame_1_1 = AI_interpolation(AI_model, frame1, frame2)        
         
-        image_write(frame_1_name,   frame1)
-        image_write(frame_1_1_name, frame_1_1)
-        image_write(frame_2_name,   frame2)
-
-        all_video_frames_path_list.append(frame_1_name)
-        all_video_frames_path_list.append(frame_1_1_name)
-        all_video_frames_path_list.append(frame_2_name)
+        frames_to_save.extend([frame1, frame_1_1, frame2])
+        frame_paths_to_save.extend([frame_1_name, frame_1_1_name, frame_2_name])
+        all_video_frames_path_list.extend([frame_1_name, frame_1_1_name, frame_2_name])
 
     elif frames_to_generate == 3: 
         # fluidification x4
@@ -475,25 +278,13 @@ def AI_generate_frames(
         frame_1_2_name = f"{frame_base_name}_.2{selected_output_file_extension}"
         frame_1_3_name = f"{frame_base_name}_.3{selected_output_file_extension}"
 
-        frame_1_2_tensor = AI_interpolation(AI_model, frame_1_tensor, frame_2_tensor)
-        frame_1_1_tensor = AI_interpolation(AI_model, frame_1_tensor, frame_1_2_tensor)
-        frame_1_3_tensor = AI_interpolation(AI_model, frame_1_2_tensor, frame_2_tensor)
-        
-        frame_1_1 = tensor_to_frame(frame_1_1_tensor, h, w)
-        frame_1_2 = tensor_to_frame(frame_1_2_tensor, h, w)
-        frame_1_3 = tensor_to_frame(frame_1_3_tensor, h, w)
+        frame_1_2 = AI_interpolation(AI_model, frame1, frame2)
+        frame_1_1 = AI_interpolation(AI_model, frame1, frame_1_2)
+        frame_1_3 = AI_interpolation(AI_model, frame_1_2, frame2)
 
-        image_write(frame_1_name,   frame1)
-        image_write(frame_1_1_name, frame_1_1)
-        image_write(frame_1_2_name, frame_1_2)
-        image_write(frame_1_3_name, frame_1_3)
-        image_write(frame_2_name,   frame2)
-
-        all_video_frames_path_list.append(frame_1_name)
-        all_video_frames_path_list.append(frame_1_1_name)
-        all_video_frames_path_list.append(frame_1_2_name)
-        all_video_frames_path_list.append(frame_1_3_name)
-        all_video_frames_path_list.append(frame_2_name)
+        frames_to_save.extend([frame1, frame_1_1, frame_1_2, frame_1_3, frame2])
+        frame_paths_to_save.extend([frame_1_name, frame_1_1_name, frame_1_2_name, frame_1_3_name, frame_2_name])
+        all_video_frames_path_list.extend([frame_1_name, frame_1_1_name, frame_1_2_name, frame_1_3_name, frame_2_name])
 
     elif frames_to_generate == 7: 
         # fluidification x8
@@ -505,205 +296,37 @@ def AI_generate_frames(
         frame_1_6_name = f"{frame_base_name}_.6{selected_output_file_extension}"
         frame_1_7_name = f"{frame_base_name}_.7{selected_output_file_extension}"
 
-        frame_1_4_tensor   = AI_interpolation(AI_model, frame_1_tensor, frame_2_tensor)
-        frame_1_2_tensor   = AI_interpolation(AI_model, frame_1_tensor, frame_1_4_tensor)
-        frame_1_1_tensor   = AI_interpolation(AI_model, frame_1_tensor, frame_1_2_tensor)
-        frame_1_3_tensor   = AI_interpolation(AI_model, frame_1_2_tensor, frame_1_4_tensor)
+        frame_1_4 = AI_interpolation(AI_model, frame1, frame2)
+        frame_1_2 = AI_interpolation(AI_model, frame1, frame_1_4)
+        frame_1_1 = AI_interpolation(AI_model, frame1, frame_1_2)
+        frame_1_3 = AI_interpolation(AI_model, frame_1_2, frame_1_4)
+        frame_1_6 = AI_interpolation(AI_model, frame_1_4, frame2)
+        frame_1_5 = AI_interpolation(AI_model, frame_1_4, frame_1_6)
+        frame_1_7 = AI_interpolation(AI_model, frame_1_6, frame2)
 
-        frame_1_6_tensor   = AI_interpolation(AI_model, frame_1_4_tensor, frame_2_tensor)
-        frame_1_5_tensor   = AI_interpolation(AI_model, frame_1_4_tensor, frame_1_6_tensor)
-        frame_1_7_tensor   = AI_interpolation(AI_model, frame_1_6_tensor, frame_2_tensor)
+        frames_to_save.extend([frame1, frame_1_1, frame_1_2, frame_1_3, frame_1_4, frame_1_5, frame_1_6, frame_1_7, frame2])
+        frame_paths_to_save.extend([frame_1_name, frame_1_1_name, frame_1_2_name, 
+                                    frame_1_3_name, frame_1_4_name, frame_1_5_name, 
+                                    frame_1_6_name, frame_1_7_name, frame_2_name])
+        all_video_frames_path_list.extend([frame_1_name, frame_1_1_name, frame_1_2_name, 
+                                    frame_1_3_name, frame_1_4_name, frame_1_5_name, 
+                                    frame_1_6_name, frame_1_7_name, frame_2_name])
 
-        frame_1_1 = tensor_to_frame(frame_1_1_tensor, h, w)
-        frame_1_2 = tensor_to_frame(frame_1_2_tensor, h, w)
-        frame_1_3 = tensor_to_frame(frame_1_3_tensor, h, w)
-        frame_1_4 = tensor_to_frame(frame_1_4_tensor, h, w)
-        frame_1_5 = tensor_to_frame(frame_1_5_tensor, h, w)
-        frame_1_6 = tensor_to_frame(frame_1_6_tensor, h, w)
-        frame_1_7 = tensor_to_frame(frame_1_7_tensor, h, w)
-
-        image_write(frame_1_name, frame1)
-        image_write(frame_1_1_name, frame_1_1)
-        image_write(frame_1_2_name, frame_1_2)
-        image_write(frame_1_3_name, frame_1_3)
-        image_write(frame_1_4_name, frame_1_4)
-        image_write(frame_1_5_name, frame_1_5)
-        image_write(frame_1_6_name, frame_1_6)
-        image_write(frame_1_7_name, frame_1_7)
-        image_write(frame_2_name, frame2)
-
-        all_video_frames_path_list.append(frame_1_name)
-        all_video_frames_path_list.append(frame_1_1_name)
-        all_video_frames_path_list.append(frame_1_2_name)
-        all_video_frames_path_list.append(frame_1_3_name)
-        all_video_frames_path_list.append(frame_1_4_name)
-        all_video_frames_path_list.append(frame_1_5_name)
-        all_video_frames_path_list.append(frame_1_6_name)
-        all_video_frames_path_list.append(frame_1_7_name)
-        all_video_frames_path_list.append(frame_2_name)
+    thread = Thread(
+        target = save_multiple_frames_async,
+        args = (
+            frames_to_save, 
+            frame_paths_to_save
+        )
+    )
+    thread.start()
 
     return all_video_frames_path_list
-
-def AI_interpolation(
-        AI_model: any, 
-        image1: numpy_ndarray, 
-        image2: numpy_ndarray, 
-        timestep = 0.5, 
-        scale = 1.0) -> numpy_ndarray:
-    
-    imgs = torch_cat((image1, image2), 1)
-    scale_list = [8/scale, 4/scale, 2/scale, 1/scale]
-    _, _, merged = AI_model(imgs, timestep, scale_list)
-    return merged[3]
-
-def frames_to_tensors(
-        frame_1: numpy_ndarray, 
-        frame_2: numpy_ndarray, 
-        backend: directml_device,
-    ) -> tuple:
-
-    tensor_1 = (torch_tensor(frame_1.transpose(2, 0, 1)).to(backend, non_blocking=True) / 255.0).unsqueeze(0)
-    tensor_2 = (torch_tensor(frame_2.transpose(2, 0, 1)).to(backend, non_blocking=True) / 255.0).unsqueeze(0)
-
-    _, _, original_height, original_width = tensor_1.shape
-
-    padded_height = ((original_height - 1) // 32 + 1) * 32
-    padded_width  = ((original_width - 1) // 32 + 1) * 32
-
-    padding = (0, padded_width - original_width, 0, padded_height - original_height)
-
-    padded_tensor_1 = torch_nn_functional_pad(tensor_1, padding)
-    padded_tensor_2 = torch_nn_functional_pad(tensor_2, padding)
-
-    return padded_tensor_1, padded_tensor_2, original_height, original_width
-
-def tensor_to_frame(
-        result: torch_tensor, 
-        height: int, 
-        width: int
-        ) -> any:
-    
-    return (result[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:height, :width]
 
 
 
 # GUI utils ---------------------------
 
-class ScrollableImagesTextFrame(CTkScrollableFrame):
-
-    def __init__(
-            self, 
-            master,
-            selected_file_list, 
-            **kwargs
-            ) -> None:
-        
-        super().__init__(master, **kwargs)
-        self.grid_columnconfigure(0, weight = 1)
-
-        self.file_list = selected_file_list
-        self._create_widgets()
-
-    def _create_widgets(
-            self,
-            ) -> None:
-        
-        self.add_clean_button()
-
-        index_row = 1
-
-        for file_path in self.file_list:
-
-            if check_if_file_is_video(file_path):
-                infos, icon = self.extract_video_info(file_path)
-        
-            label = CTkLabel(
-                self, 
-                text       = infos,
-                image      = icon, 
-                font       = bold11,
-                text_color = "#E0E0E0",
-                compound   = "left", 
-                padx       = 10,
-                pady       = 5,
-                anchor     = "center"
-            )
-                            
-            label.grid(
-                row = index_row, 
-                column = 0, 
-                pady = (3, 3), 
-                padx = (3, 3), 
-                sticky = "w"
-            )
-            
-            index_row +=1
-
-    def add_clean_button(
-            self: any
-            ) -> None:
-        
-        button = CTkButton(
-            self, 
-            image        = clear_icon,
-            font         = bold11,
-            text         = "CLEAN", 
-            compound     = "left",
-            width        = 100, 
-            height       = 28,
-            border_width = 1,
-            fg_color     = "#282828",
-            text_color   = "#E0E0E0",
-            border_color = "#0096FF"
-            )
-
-        button.configure(command=lambda: self.clean_all_items())
-        button.grid(row = 0, column=2, pady=(7, 7), padx = (0, 7))
-        
-    def get_selected_file_list(
-        self: any
-        ) -> list: 
-    
-        return self.file_list  
-
-    def clean_all_items(
-            self: any
-            ) -> None:
-        
-        self.file_list = []
-        self.destroy()
-        place_loadFile_section()
-
-    def extract_video_info(
-        self: any,
-        video_file: str
-        ) -> tuple:
-        
-        cap          = opencv_VideoCapture(video_file)
-        width        = round(cap.get(CAP_PROP_FRAME_WIDTH))
-        height       = round(cap.get(CAP_PROP_FRAME_HEIGHT))
-        num_frames   = int(cap.get(CAP_PROP_FRAME_COUNT))
-        frame_rate   = cap.get(CAP_PROP_FPS)
-        duration     = num_frames/frame_rate
-        minutes      = int(duration/60)
-        seconds      = duration % 60
-        video_name   = str(video_file.split("/")[-1])
-        
-        while(cap.isOpened()):
-            ret, frame = cap.read()
-            if ret == False: break
-            frame = opencv_cvtColor(frame, COLOR_BGR2RGB)
-            video_icon = CTkImage(
-                pillow_image_fromarray(frame, mode="RGB"), 
-                size = (25, 25)
-                )
-            break
-        cap.release()
-
-        video_infos = f"{video_name} • {width}x{height} • {minutes}m:{round(seconds)}s • {num_frames}frames • {round(frame_rate, 2)}fps"
-        
-        return video_infos, video_icon
-    
 class CTkMessageBox(CTkToplevel):
 
     def __init__(
@@ -734,33 +357,24 @@ class CTkMessageBox(CTkToplevel):
         self.resizable(False, False)
         self.grab_set()                       # make other windows not clickable
 
-    def _ok_event(
-            self, 
-            event = None
-            ) -> None:
+    def _ok_event(self) -> None:
         self.grab_release()
         self.destroy()
 
-    def _on_closing(
-            self
-            ) -> None:
+    def _on_closing(self) -> None:
         self.grab_release()
         self.destroy()
 
-    def createEmptyLabel(
-            self
-            ) -> CTkLabel:
-        
-        return CTkLabel(master = self, 
-                        fg_color = "transparent",
-                        width    = 500,
-                        height   = 17,
-                        text     = '')
+    def createEmptyLabel(self) -> CTkLabel:
+        return CTkLabel(
+            master = self,
+            fg_color = "transparent",
+            width    = 500,
+            height   = 17,
+            text     = ''
+        )
 
-    def placeInfoMessageTitleSubtitle(
-            self,
-            ) -> None:
-
+    def placeInfoMessageTitleSubtitle(self) -> None:
         spacingLabel1 = self.createEmptyLabel()
         spacingLabel2 = self.createEmptyLabel()
 
@@ -818,22 +432,21 @@ class CTkMessageBox(CTkToplevel):
         self._ctkwidgets_index += 1
         spacingLabel2.grid(row = self._ctkwidgets_index, column = 0, columnspan = 2, padx = 0, pady = 0, sticky = "ew")
 
-    def placeInfoMessageOptionsText(
-            self,
-            ) -> None:
-        
+    def placeInfoMessageOptionsText(self) -> None:
         for option_text in self._option_list:
-            optionLabel = CTkLabel(master = self,
-                                    width  = 600,
-                                    height = 45,
-                                    corner_radius = 6,
-                                    anchor     = 'w',
-                                    justify    = "left",
-                                    text_color = "#C0C0C0",
-                                    fg_color   = "#282828",
-                                    bg_color   = "transparent",
-                                    font       = bold12,
-                                    text       = option_text)
+            optionLabel = CTkLabel(
+                master = self,
+                width  = 600,
+                height = 45,
+                corner_radius = 6,
+                anchor     = 'w',
+                justify    = "left",
+                text_color = "#C0C0C0",
+                fg_color   = "#282828",
+                bg_color   = "transparent",
+                font       = bold12,
+                text       = option_text
+            )
             
             self._ctkwidgets_index += 1
             optionLabel.grid(row = self._ctkwidgets_index, column = 0, columnspan = 2, padx = 25, pady = 4, sticky = "ew")
@@ -843,10 +456,7 @@ class CTkMessageBox(CTkToplevel):
         self._ctkwidgets_index += 1
         spacingLabel3.grid(row = self._ctkwidgets_index, column = 0, columnspan = 2, padx = 0, pady = 0, sticky = "ew")
 
-    def placeInfoMessageOkButton(
-            self
-            ) -> None:
-        
+    def placeInfoMessageOkButton(self) -> None:
         ok_button = CTkButton(
             master  = self,
             command = self._ok_event,
@@ -857,15 +467,12 @@ class CTkMessageBox(CTkToplevel):
             fg_color     = "#282828",
             text_color   = "#E0E0E0",
             border_color = "#0096FF"
-            )
+        )
         
         self._ctkwidgets_index += 1
         ok_button.grid(row = self._ctkwidgets_index, column = 1, columnspan = 1, padx = (10, 20), pady = (10, 20), sticky = "e")
 
-    def _create_widgets(
-            self
-            ) -> None:
-
+    def _create_widgets(self) -> None:
         self.grid_columnconfigure((0, 1), weight=1)
         self.rowconfigure(0, weight=1)
 
@@ -873,10 +480,184 @@ class CTkMessageBox(CTkToplevel):
         self.placeInfoMessageOptionsText()
         self.placeInfoMessageOkButton()
 
-def create_info_button(
-        command: any, 
-        text: str
-        ) -> CTkButton:
+class ScrollableImagesTextFrame_framegeneration(CTkScrollableFrame):
+
+    def __init__(
+        self, 
+        master,
+        selected_file_list, 
+        resize_factor = 0,
+        frame_generation_factor = 1,
+        **kwargs
+        ) -> None:
+        
+        super().__init__(master, **kwargs)
+        self.grid_columnconfigure(0, weight = 1)
+
+        self.file_list      = selected_file_list
+        self.resize_factor  = resize_factor
+        self.frame_generation_factor = frame_generation_factor
+
+        self.label_list = []
+        self._create_widgets()
+
+    def _create_widgets(self) -> None:
+        self.add_clean_button()
+        index_row = 1
+        for file_path in self.file_list:
+            label = self.add_file_information(file_path, index_row)
+            self.label_list.append(label)
+            index_row +=1
+
+    def add_file_information(self, file_path, index_row) -> CTkLabel:
+        infos, icon = self.extract_file_info(file_path)
+        label = CTkLabel(
+            self, 
+            text       = infos,
+            image      = icon, 
+            font       = bold11,
+            text_color = "#C0C0C0",
+            compound   = "left", 
+            anchor     = "w",
+            padx       = 10,
+            pady       = 5,
+            justify    = "left",
+        )      
+        label.grid(row = index_row, column = 0, 
+                   pady = (3, 3), padx = (3, 3), 
+                   sticky = "w")
+        return label
+
+    def add_clean_button(self) -> None:
+        button = CTkButton(
+            self, 
+            image        = clear_icon,
+            font         = bold11,
+            text         = "CLEAN", 
+            compound     = "left",
+            width        = 100, 
+            height       = 28,
+            border_width = 1,
+            fg_color     = "#282828",
+            text_color   = "#E0E0E0",
+            border_color = "#0096FF"
+            )
+
+        button.configure(command=lambda: self._destroy_())
+        button.grid(row = 0, column=2, pady=(7, 7), padx = (0, 7))
+        
+    def get_selected_file_list(self) -> list: 
+        return self.file_list  
+
+    def set_frame_generation_factor(self, frame_generation_factor) -> None:
+        self.frame_generation_factor = frame_generation_factor
+
+    def set_resize_factor(self, resize_factor) -> None:
+        self.resize_factor = resize_factor
+
+    @cache
+    def extract_file_icon(self, file_path) -> CTkImage:
+        if check_if_file_is_video(file_path):
+            cap = opencv_VideoCapture(file_path)
+            _, frame = cap.read()
+            frame = opencv_cvtColor(frame, COLOR_BGR2RGB)
+            max_size = 50
+            ratio = min(max_size / frame.shape[0], max_size / frame.shape[1])
+            new_width = int(frame.shape[1] * ratio)
+            new_height = int(frame.shape[0] * ratio)
+            video_icon = CTkImage(
+                pillow_image_fromarray(frame, mode="RGB"), 
+                size = (new_width, new_height)
+            )
+            cap.release()
+            return video_icon
+
+    def extract_file_info(self, file_path) -> tuple:
+        
+        if check_if_file_is_video(file_path):
+            cap          = opencv_VideoCapture(file_path)
+            width        = round(cap.get(CAP_PROP_FRAME_WIDTH))
+            height       = round(cap.get(CAP_PROP_FRAME_HEIGHT))
+            num_frames   = int(cap.get(CAP_PROP_FRAME_COUNT))
+            frame_rate   = cap.get(CAP_PROP_FPS)
+            duration     = num_frames/frame_rate
+            minutes      = int(duration/60)
+            seconds      = duration % 60
+            cap.release()
+
+            video_name = str(file_path.split("/")[-1])
+            video_icon = self.extract_file_icon(file_path)
+
+            match self.resize_factor:
+                case 0:
+                    video_infos = (
+                        f"{video_name}\n"
+                        f"{minutes}m:{round(seconds)}s • {num_frames}frames • {width}x{height} • {round(frame_rate, 2)}fps"
+                    )
+                    return video_infos, video_icon
+                case _:
+                    resized_height = int(height * (self.resize_factor/100))
+                    resized_width  = int(width * (self.resize_factor/100))
+
+                    if   "x2" in self.frame_generation_factor: 
+                        generation_factor = 2
+                    elif "x4" in self.frame_generation_factor: 
+                        generation_factor = 4
+                    elif "x8" in self.frame_generation_factor: 
+                        generation_factor = 8
+
+                    frame_generated_fps = frame_rate * generation_factor
+
+                    if "slowmotion" in self.frame_generation_factor:
+                        slowmotion = True
+                    else:
+                        slowmotion = False
+
+                    if slowmotion:
+                        duration_slowmotion = (num_frames/frame_rate) * generation_factor
+                        minutes_slowmotion  = int(duration_slowmotion/60)
+                        seconds_slowmotion  = duration_slowmotion % 60
+                        video_infos = (
+                            f"{video_name}\n"
+                            f"{minutes}m:{round(seconds)}s • {num_frames}frames • {width}x{height} : {round(frame_rate, 2)}fps\n"
+                            f"AI input {resized_width}x{resized_height} ➜ {resized_width}x{resized_height} : {round(frame_rate, 2)}fps : {minutes_slowmotion}m:{round(seconds_slowmotion)}s"
+                        )
+                    else:
+                        video_infos = (
+                            f"{video_name}\n"
+                            f"{minutes}m:{round(seconds)}s • {num_frames}frames • {width}x{height} : {round(frame_rate, 2)}fps\n"
+                            f"AI input {resized_width}x{resized_height} ➜ {resized_width}x{resized_height} : {round(frame_generated_fps, 2)}fps"
+                        )
+
+                    return video_infos, video_icon
+
+    def _destroy_(self) -> None:
+        self.file_list = []
+        self.destroy()
+        place_loadFile_section()
+
+    def clean_file_list(self) -> None:
+        for label in self.label_list:
+            label.grid_forget()
+
+def update_file_widget(a, b, c) -> None:
+    try:
+        global scrollable_frame_file_list
+        scrollable_frame_file_list
+    except:
+        return
+        
+    try:
+        resize_factor = int(float(str(selected_resize_factor.get())))
+    except:
+        resize_factor = 0
+    
+    scrollable_frame_file_list.clean_file_list()
+    scrollable_frame_file_list.set_resize_factor(resize_factor)
+    scrollable_frame_file_list.set_frame_generation_factor(selected_frame_generation_option)
+    scrollable_frame_file_list._create_widgets()
+
+def create_info_button(command: Callable, text: str) -> CTkButton:
     
     return CTkButton(
         master  = window, 
@@ -886,24 +667,21 @@ def create_info_button(
         hover_color   = "#181818",
         text_color    = "#C0C0C0",
         anchor        = "w",
-        height        = 23,
+        height        = 22,
         width         = 150,
-        corner_radius = 12,
+        corner_radius = 10,
         font          = bold12,
         image         = info_icon
-        )
+    )
 
-def create_option_menu(
-        command: any, 
-        values: list
-        ) -> CTkOptionMenu:
+def create_option_menu(command: Callable, values: list) -> CTkOptionMenu:
     
     return CTkOptionMenu(
         master  = window, 
         command = command,
         values  = values,
         width              = 150,
-        height             = 31,
+        height             = 30,
         corner_radius      = 6,
         dropdown_font      = bold11,
         font               = bold11,
@@ -913,11 +691,9 @@ def create_option_menu(
         button_color       = "#000000",
         button_hover_color = "#000000",
         dropdown_fg_color  = "#000000"
-        )
+    )
 
-def create_text_box(
-        textvariable: StringVar,
-        ) -> CTkEntry:
+def create_text_box(textvariable: StringVar) -> CTkEntry:
     
     return CTkEntry(
         master        = window, 
@@ -930,10 +706,7 @@ def create_text_box(
         justify       = "center",
         fg_color      = "#000000",
         border_color  = "#404040",
-        )
-
-def test_callback(a, b, c):
-    print("Pippo")
+    )
 
 
 
@@ -946,12 +719,24 @@ def find_by_relative_path(
     base_path = getattr(sys, '_MEIPASS', os_path_dirname(os_path_abspath(__file__)))
     return os_path_join(base_path, relative_path)
 
-def remove_file(
-        file_name: str
+def image_write(
+        file_path: str, 
+        file_data: any
         ) -> None: 
+    
+    _, file_extension = os_path_splitext(file_path)
+    opencv_imencode(file_extension, file_data)[1].tofile(file_path)
 
-    if os_path_exists(file_name): 
-        os_remove(file_name)
+def image_read(
+    file_path: str, 
+    flags: int = IMREAD_UNCHANGED
+    ) -> numpy_ndarray: 
+    
+    with open(file_path, 'rb') as file:
+        file_data = file.read()
+        numpy_buffer   = numpy_frombuffer(file_data, uint8)
+        opencv_decoded = opencv_imdecode(numpy_buffer, flags)
+        return opencv_decoded
 
 def remove_dir(
         name_dir: str
@@ -969,31 +754,15 @@ def create_dir(
     if not os_path_exists(name_dir): 
         os_makedirs(name_dir, mode=0o777)
 
-def remove_temp_files() -> None:
-    remove_dir(app_name + "_temp")
-
 
 
 # Image/video Utils functions ------------------------
 
-def image_write(
-        file_path: str, 
-        file_data: any
-        ) -> None: 
-    
-    _, file_extension = os_path_splitext(file_path)
-    opencv_imencode(file_extension, file_data)[1].tofile(file_path)
+def get_image_resolution(image: numpy_ndarray) -> tuple:
+    height = image.shape[0]
+    width  = image.shape[1]
 
-def image_read(
-        file_path: str, 
-        flags: int = IMREAD_UNCHANGED
-        ) -> numpy_ndarray: 
-    
-    with open(file_path, 'rb') as file:
-        image_data    = file.read()
-        image_buffer  = numpy_frombuffer(image_data, uint8)
-        image_decoded = opencv_imdecode(image_buffer, flags)
-        return image_decoded
+    return height, width 
 
 def resize_frames(
         frame_1: numpy_ndarray, 
@@ -1007,7 +776,7 @@ def resize_frames(
         return frame_1, frame_2
     else: 
         frame_1_resized = opencv_resize(frame_1, (target_width, target_height), interpolation = INTER_LINEAR)    
-        frame_2_resized = opencv_resize(frame_2, (target_width, target_height), interpolation = INTER_CUBIC)
+        frame_2_resized = opencv_resize(frame_2, (target_width, target_height), interpolation = INTER_LINEAR)
         return frame_1_resized, frame_2_resized
 
 def extract_video_fps(
@@ -1022,27 +791,55 @@ def extract_video_fps(
 def extract_video_frames_and_audio(
         target_directory: str,
         video_path: str, 
-    ) -> list[str]:
+        cpu_number: int
+    ) -> tuple[list[str], str]:
 
     create_dir(target_directory)
 
+    # Audio extraction
     with VideoFileClip(video_path) as video_file_clip:
         try: 
             audio_path = f"{target_directory}{os_separator}audio.mp3"
             video_file_clip.audio.write_audiofile(audio_path, verbose = False, logger = None)
         except:
             pass
-        
-        video_frame_rate = extract_video_fps(video_path)
-        frames_sequence_path = f"{target_directory}{os_separator}frame_%01d.jpg"
-        video_frames_list = video_file_clip.write_images_sequence(
-            nameformat = frames_sequence_path, 
-            fps        = video_frame_rate,
-            verbose    = False, 
-            withmask   = True,
-            logger     = None, 
-            )
-        
+
+    # Video frame extraction
+    frames_for_cpu = 30
+    frames_number_to_save = cpu_number * frames_for_cpu
+
+    video_capture = opencv_VideoCapture(video_path)
+    frame_count   = int(video_capture.get(CAP_PROP_FRAME_COUNT))
+
+    frames_to_save      = []
+    frames_path_to_save = []
+    video_frames_list   = []
+
+    for frame_number in range(frame_count):
+        success, frame = video_capture.read()
+        if success:
+            frames_to_save.append(frame)
+            
+            frame_path = f"{target_directory}{os_separator}frame_{frame_number:03d}.jpg"
+            frames_path_to_save.append(frame_path)
+            video_frames_list.append(frame_path)
+
+            if len(frames_to_save) == frames_number_to_save:
+                pool = ThreadPool(cpu_number)
+                pool.starmap(image_write, zip(frames_path_to_save, frames_to_save))
+                pool.close()
+                pool.join()
+                frames_to_save      = []
+                frames_path_to_save = []
+
+    video_capture.release()
+
+    if len(frames_to_save) > 0:
+        pool = ThreadPool(cpu_number)
+        pool.starmap(image_write, zip(frames_path_to_save, frames_to_save))
+        pool.close()
+        pool.join()
+    
     return video_frames_list, audio_path
 
 def video_reconstruction_by_frames(
@@ -1062,16 +859,16 @@ def video_reconstruction_by_frames(
     if not slowmotion: 
         frame_rate = frame_rate * fluidification_factor
 
-    # Choose the appropriate codec
-    if selected_video_extension == '.mp4 (x264)':  
-        selected_video_extension = '.mp4'
-        codec = 'libx264'
-    elif selected_video_extension == '.mp4 (x265)':  
-        selected_video_extension = '.mp4'
-        codec = 'libx265'
-    elif selected_video_extension == '.avi': 
-        selected_video_extension = '.avi' 
-        codec = 'png'
+    match selected_video_extension:
+        case '.mp4 (x264)':
+            selected_video_extension = '.mp4'
+            codec = 'libx264'
+        case '.mp4 (x265)':
+            selected_video_extension = '.mp4'
+            codec = 'libx265'
+        case '.avi':
+            selected_video_extension = '.avi'
+            codec = 'png'
 
     upscaled_video_path = prepare_output_video_filename(
         video_path, 
@@ -1083,44 +880,49 @@ def video_reconstruction_by_frames(
     )
 
     clip = ImageSequenceClip.ImageSequenceClip(all_video_frames_paths, fps = frame_rate)
-    if os_path_exists(audio_path):
+    if slowmotion:
         clip.write_videofile(
             upscaled_video_path,
             fps     = frame_rate,
-            audio   = audio_path,
             codec   = codec,
             bitrate = '16M',
-            #ffmpeg_params = [ '-vf', 'scale=out_range=full' ],
             verbose = False,
             logger  = None,
             threads = cpu_number
-        )
+        ) 
     else:
-        clip.write_videofile(
-            upscaled_video_path,
-            fps     = frame_rate,
-            codec   = codec,
-            bitrate = '16M',
-            #ffmpeg_params = [ '-vf', 'scale=out_range=full' ],
-            verbose = False,
-            logger  = None,
-            threads = cpu_number
+        if os_path_exists(audio_path):
+            clip.write_videofile(
+                upscaled_video_path,
+                fps     = frame_rate,
+                audio   = audio_path,
+                codec   = codec,
+                bitrate = '16M',
+                verbose = False,
+                logger  = None,
+                threads = cpu_number
+            )
+        else:
+            clip.write_videofile(
+                upscaled_video_path,
+                fps     = frame_rate,
+                codec   = codec,
+                bitrate = '16M',
+                verbose = False,
+                logger  = None,
+                threads = cpu_number
             )      
 
 def calculate_time_to_complete_video(
-        start_timer: float, 
-        end_timer: float, 
-        how_many_frames: int, 
-        index_frame: int
+        time_for_frame: float,
+        remaining_frames: int,
         ) -> str:
     
-    seconds_for_frame = round(end_timer - start_timer, 2)
-    frames_left       = how_many_frames - (index_frame + 1)
-    seconds_left      = seconds_for_frame * frames_left
+    remaining_time = time_for_frame * remaining_frames
 
-    hours_left   = seconds_left // 3600
-    minutes_left = (seconds_left % 3600) // 60
-    seconds_left = round((seconds_left % 3600) % 60)
+    hours_left   = remaining_time // 3600
+    minutes_left = (remaining_time % 3600) // 60
+    seconds_left = round((remaining_time % 3600) % 60)
 
     time_left = ""
 
@@ -1133,21 +935,23 @@ def calculate_time_to_complete_video(
     if seconds_left > 0: 
         time_left = f"{time_left}{seconds_left:02d}s"
 
-    return time_left   
+    return time_left    
 
 def update_process_status_videos(
         processing_queue: multiprocessing_Queue, 
         file_number: int, 
-        start_timer: float, 
-        index_frame: int, 
-        how_many_frames: int
+        frame_index: int, 
+        how_many_frames: int,
+        average_processing_time: float,
         ) -> None:
     
-    if index_frame != 0 and (index_frame + 1) % 4 == 0:    
-        percent_complete = (index_frame + 1) / how_many_frames * 100 
-        end_timer        = timer()
-        time_left        = calculate_time_to_complete_video(start_timer, end_timer, how_many_frames, index_frame)
-    
+    if frame_index != 0 and (frame_index + 1) % 8 == 0:    
+        percent_complete = (frame_index + 1) / how_many_frames * 100 
+
+        time_left = calculate_time_to_complete_video(
+            time_for_frame   = average_processing_time,
+            remaining_frames = how_many_frames - frame_index
+        )
         write_process_status(processing_queue, f"{file_number}. Fluidifying video {percent_complete:.2f}% ({time_left})")
 
 
@@ -1167,13 +971,11 @@ def check_fluidify_steps() -> None:
             if actual_step == COMPLETED_STATUS:
                 info_message.set(f"All files completed! :)")
                 stop_fluidify_process()
-                remove_temp_files()
                 stop_thread()
 
             elif actual_step == STOP_STATUS:
                 info_message.set(f"Fluidify stopped")
                 stop_fluidify_process()
-                remove_temp_files()
                 stop_thread()
 
             elif ERROR_STATUS in actual_step:
@@ -1181,7 +983,6 @@ def check_fluidify_steps() -> None:
                 error = actual_step.replace(ERROR_STATUS, "")
                 info_message.set(error_message)
                 show_error_message(error)
-                remove_temp_files()
                 stop_thread()
 
             else:
@@ -1204,15 +1005,15 @@ def write_process_status(
     processing_queue.put(f"{step}")
 
 def stop_fluidify_process() -> None:
-    global process_fluidify_orchestrator
+    global process_frame_generation_orchestrator
 
     try:
-        process_fluidify_orchestrator
+        process_frame_generation_orchestrator
     except:
         pass
     else:
-        process_fluidify_orchestrator.terminate()
-        process_fluidify_orchestrator.join()
+        process_frame_generation_orchestrator.terminate()
+        process_frame_generation_orchestrator.join()
 
 def stop_button_command() -> None:
     stop_fluidify_process()
@@ -1280,32 +1081,32 @@ def get_video_target_resolution(
     return target_height, target_width
 
 def check_fluidification_option(
-        selected_fluidity_option: str
+        selected_frame_generation_option: str
         ) -> tuple:
     
     slowmotion = False
     fluidification_factor = 0
 
-    if 'slowmotion' in selected_fluidity_option: slowmotion = True
+    if 'slowmotion' in selected_frame_generation_option: slowmotion = True
 
-    if '2' in selected_fluidity_option:   fluidification_factor = 2
-    elif '4' in selected_fluidity_option: fluidification_factor = 4
-    elif '8' in selected_fluidity_option: fluidification_factor = 8
+    if   '2' in selected_frame_generation_option: fluidification_factor = 2
+    elif '4' in selected_frame_generation_option: fluidification_factor = 4
+    elif '8' in selected_frame_generation_option: fluidification_factor = 8
 
     return fluidification_factor, slowmotion
 
 def fludify_button_command() -> None: 
     global selected_file_list
     global selected_AI_model
-    global selected_fluidity_option
-    global selected_AI_device 
+    global selected_frame_generation_option
+    global selected_gpu
     global selected_image_extension
     global selected_video_extension
     global resize_factor
     global cpu_number
     global selected_save_frames
 
-    global process_fluidify_orchestrator
+    global process_frame_generation_orchestrator
     
     if user_input_checks():
         info_message.set("Loading")
@@ -1314,8 +1115,7 @@ def fludify_button_command() -> None:
         print(f"> Starting fluidify:")
         print(f"   Files to fluidify: {len(selected_file_list)}")
         print(f"   Selected AI model: {selected_AI_model}")
-        print(f"   Selected fluidify option: {selected_fluidity_option}")
-        print(f"   Selected GPU: {directml_device_name(selected_AI_device)}")
+        print(f"   Selected fluidify option: {selected_frame_generation_option}")
         print(f"   Selected image output extension: {selected_image_extension}")
         print(f"   Selected video output extension: {selected_video_extension}")
         print(f"   Resize factor: {int(resize_factor * 100)}%")
@@ -1323,18 +1123,16 @@ def fludify_button_command() -> None:
         print(f"   Save frames: {selected_save_frames}")
         print("=" * 50)
 
-        backend = torch_device(directml_device(selected_AI_device))
-
         place_stop_button()
 
-        process_fluidify_orchestrator = Process(
-            target = fluidify_orchestrator,
+        process_frame_generation_orchestrator = Process(
+            target = frame_generation_orchestrator,
             args = (
                 processing_queue, 
                 selected_file_list, 
                 selected_AI_model,
-                selected_fluidity_option, 
-                backend, 
+                selected_gpu,
+                selected_frame_generation_option, 
                 selected_image_extension, 
                 selected_video_extension, 
                 resize_factor, 
@@ -1342,46 +1140,43 @@ def fludify_button_command() -> None:
                 selected_save_frames
             )
         )
-        process_fluidify_orchestrator.start()
+        process_frame_generation_orchestrator.start()
 
         thread_wait = Thread(
             target = check_fluidify_steps
         )
         thread_wait.start()
 
-def fluidify_orchestrator(
+def frame_generation_orchestrator(
         processing_queue: multiprocessing_Queue,
         selected_file_list: list,
         selected_AI_model: str,
-        selected_fluidity_option: str,
-        backend: directml_device, 
+        selected_gpu: str,
+        selected_frame_generation_option: str,
         selected_image_extension: str,
         selected_video_extension: str,
         resize_factor: int,
         cpu_number: int,
         selected_save_frames: bool
         ) -> None:
-        
-    torch_set_num_threads(2)
-    
-    fluidification_factor, slowmotion = check_fluidification_option(selected_fluidity_option)
+            
+    fluidification_factor, slowmotion = check_fluidification_option(selected_frame_generation_option)
 
     try:
         write_process_status(processing_queue, f"Loading AI model")
-        
-        AI_model = load_AI_model(selected_AI_model, backend)
+
+        AI_model = load_AI_model(selected_AI_model, selected_gpu)
 
         how_many_files = len(selected_file_list)
         for file_number in range(how_many_files):
             file_path   = selected_file_list[file_number]
             file_number = file_number + 1
 
-            fluidify_video(
+            video_frame_generation(
                 processing_queue,
                 file_path, 
                 file_number,
                 AI_model,
-                backend,
                 selected_AI_model,
                 fluidification_factor, 
                 slowmotion,
@@ -1397,12 +1192,11 @@ def fluidify_orchestrator(
     except Exception as exception:
         write_process_status(processing_queue, f"{ERROR_STATUS}{str(exception)}")
 
-def fluidify_video(
+def video_frame_generation(
         processing_queue: multiprocessing_Queue,
         video_path: str, 
         file_number: int,
-        AI_model: any,
-        backend: directml_device, 
+        AI_model: onnxruntime_inferenceSession,
         selected_AI_model: str,
         fluidification_factor: int, 
         slowmotion: bool, 
@@ -1420,37 +1214,43 @@ def fluidify_video(
         fluidification_factor, 
         slowmotion,
         resize_factor
-        )
+    )
     
     # Extract video frames and audio
     write_process_status(processing_queue, f"{file_number}. Extracting video frames")
-    frame_list_paths, audio_path = extract_video_frames_and_audio(target_directory, video_path)
-    target_height, target_width = get_video_target_resolution(frame_list_paths[0], resize_factor)  
+    frame_list_paths, audio_path = extract_video_frames_and_audio(
+        target_directory, 
+        video_path,
+        cpu_number
+    )
+    target_height, target_width = get_video_target_resolution(
+        frame_list_paths[0], 
+        resize_factor
+    )  
 
     write_process_status(processing_queue, f"{file_number}. Video frame generation")
     all_video_frames_paths = []
+    frame_processing_times = []
     how_many_frames = len(frame_list_paths)
-    for index_frame in range(how_many_frames-1):
+
+    for frame_index in range(how_many_frames-1):
 
         start_timer = timer()
 
-        frame_base_name = os_path_splitext(frame_list_paths[index_frame])[0]
-        frame_1_name = frame_list_paths[index_frame]
-        frame_2_name = frame_list_paths[index_frame + 1]
+        frame_base_name = os_path_splitext(frame_list_paths[frame_index])[0]
+        frame_1_name = frame_list_paths[frame_index]
+        frame_2_name = frame_list_paths[frame_index + 1]
 
-        # Read frames and resize if needed
         frame_1, frame_2 = resize_frames(
-            frame_1 = image_read(frame_list_paths[index_frame]), 
-            frame_2 = image_read(frame_list_paths[index_frame + 1]), 
+            frame_1 = image_read(frame_list_paths[frame_index]), 
+            frame_2 = image_read(frame_list_paths[frame_index + 1]), 
             resize_factor = resize_factor, 
             target_width  = target_width, 
             target_height = target_height
-            )
+        )
 
-        # Generate frame/s beetween frame 1 and 2
         all_video_frames_paths = AI_generate_frames(
             AI_model,
-            backend,
             frame_1, 
             frame_2, 
             frame_1_name,
@@ -1461,11 +1261,20 @@ def fluidify_video(
             fluidification_factor
         )
 
-        # Update process status every 4 frames
-        update_process_status_videos(processing_queue, file_number, start_timer, index_frame, how_many_frames)
-            
-    # Delete duplicates frames in list
+        frame_processing_times.append(timer() - start_timer)
+        average_processing_time = float(numpy_mean(frame_processing_times))
+    
+        update_process_status_videos(
+            processing_queue = processing_queue, 
+            file_number = file_number,  
+            frame_index = frame_index, 
+            how_many_frames = how_many_frames,
+            average_processing_time = average_processing_time
+        )
+
     all_video_frames_paths = list(dict.fromkeys(all_video_frames_paths))
+    #for _ in range(fluidification_factor-1):
+    #    all_video_frames_paths.append(all_video_frames_paths[-1])
 
     # Video reconstruction
     write_process_status(processing_queue, f"{file_number}. Processing fluidified video")  
@@ -1496,8 +1305,7 @@ def opentelegram() -> None:
 
 def user_input_checks() -> None:
     global selected_file_list
-    global selected_fluidity_option
-    global selected_AI_device 
+    global selected_frame_generation_option
     global selected_image_extension
     global resize_factor
     global cpu_number
@@ -1598,15 +1406,13 @@ def select_AI_from_menu(
     selected_AI_model = selected_option
 
 def select_framegeneration_option_from_menu(new_value: str):
-    global selected_fluidity_option    
-    selected_fluidity_option = new_value
+    global selected_frame_generation_option    
+    selected_frame_generation_option = new_value
+    update_file_widget(1,2,3)
 
-def select_AI_device_from_menu(new_value: str):
-    global selected_AI_device    
-
-    for device in gpu_list:
-        if device.name == new_value:
-            selected_AI_device = device.index
+def select_gpu_from_menu(selected_option: str) -> None:
+    global selected_gpu    
+    selected_gpu = selected_option
 
 def select_image_extension_from_menu(new_value: str):
     global selected_image_extension    
@@ -1637,7 +1443,7 @@ def open_info_AI_model():
         "\n RIFE_4.13_Lite\n" + 
         "   • Lightweight version of RIFE AI model\n" +
         "   • High frame generation quality\n" +
-        "   • 25% faster than full model\n" + 
+        "   • 10% faster than full model\n" + 
         "   • Use less GPU VRAM memory\n" +
         "   • Recommended for GPUs with VRAM < 4GB \n",
     ]
@@ -1648,14 +1454,14 @@ def open_info_AI_model():
                     default_value = "RIFE_4.13",
                     option_list = option_list)
 
-def open_info_fluidity_option():
+def open_info_frame_generation_option():
     option_list = [
-        "\n FLUIDIFY\n" + 
+        "\n FRAME GENERATION\n" + 
         "   • x2 ( doubles video framerate • 30fps => 60fps )\n" + 
         "   • x4 ( quadruples video framerate • 30fps => 120fps )\n" + 
         "   • x8 ( octuplicate video framerate • 30fps => 240fps )\n",
 
-        "\n SLOWMOTION (no audio)\n" + 
+        "\n FRAME GENETATION/SLOWMOTION (no audio)\n" + 
         "   • x2-slowmotion ( slowmotion effect by a factor of 2 )\n" +
         "   • x4-slowmotion ( slowmotion effect by a factor of 4 )\n" +
         "   • x8-slowmotion ( slowmotion effect by a factor of 8 )\n"
@@ -1670,58 +1476,40 @@ def open_info_fluidity_option():
 def open_info_gpu():
     option_list = [
         " Keep in mind that the more powerful the chosen gpu is, the faster the upscaling will be",
-        " For optimal results, it is essential to regularly update your GPU drivers"
+        
+        " For optimal performance, it is essential to regularly update your GPU drivers",
+
+        "\n Windows handles multiple GPUs by categorising them:\n" +
+        "  • GPU High performance\n" + 
+        "  • GPU Power saving\n" +
+        "\n In the case of a single GPU, select 'High performance'\n"
+
+
     ]
 
-    CTkMessageBox(messageType = "info",
-                    title = "GPU", 
-                    subtitle = "This widget allows to select the GPU for AI processing",
-                    default_value = None,
-                    option_list = option_list)
+    CTkMessageBox(
+        messageType = "info",
+        title       = "GPU",
+        subtitle    = "This widget allows to select the GPU for AI upscale",
+        default_value = default_gpu,
+        option_list   = option_list
+    )
 
 def open_info_AI_output():
     option_list = [
-        "\n PNG\n" + 
-        "   • very good quality\n" + 
-        "   • slow and heavy file\n" + 
-        "   • supports transparent images\n",
-
-        "\n JPG\n" + 
-        "   • good quality\n" +
-        "   • fast and lightweight file\n",
-
-        "\n BMP\n" + 
-        "   • highest quality\n" +
-        "   • slow and heavy file\n",
-
-        "\n TIFF\n" + 
-        "   • highest quality\n" +
-        "   • very slow and heavy file\n",
+        " \n PNG\n  • very good quality\n  • slow and heavy file\n  • supports transparent images\n",
+        " \n JPG\n  • good quality\n  • fast and lightweight file\n",
+        " \n BMP\n  • highest quality\n  • slow and heavy file\n",
+        " \n TIFF\n  • highest quality\n  • very slow and heavy file\n",
     ]
 
-    CTkMessageBox(messageType = "info",
-                    title = "AI output", 
-                    subtitle = "This widget allows to choose the extension of generated frames",
-                    default_value = ".png",
-                    option_list = option_list)
-
-def open_info_input_resolution():
-    option_list = [
-        " A high value (>70%) will create high quality video but will be slower",
-        " While a low value (<40%) will create good quality video but will much faster",
-
-        " \n For example, for a 1080p (1920x1080) video\n" + 
-        " • Input resolution 25% => input to AI 270p (480x270)\n" +
-        " • Input resolution 50% => input to AI 540p (960x540)\n" + 
-        " • Input resolution 75% => input to AI 810p (1440x810)\n" + 
-        " • Input resolution 100% => input to AI 1080p (1920x1080) \n",
-    ]
-
-    CTkMessageBox(messageType = "info",
-                    title = "Input resolution %", 
-                    subtitle = "This widget allows to choose the resolution input to the AI",
-                    default_value = "60%",
-                    option_list = option_list)
+    CTkMessageBox(
+        messageType = "info",
+        title       = "Image output",
+        subtitle    = "This widget allows to choose the extension of generated frames",
+        default_value = default_image_extension,
+        option_list   = option_list
+    )
 
 def open_info_video_extension():
     option_list = [
@@ -1733,16 +1521,16 @@ def open_info_video_extension():
 
         "\n AVI\n" + 
         "   • produces the highest quality video\n" +
-        "   • the video produced can also be of large size\n",
-
+        "   • the video produced can also be of large size\n"
     ]
 
-
-    CTkMessageBox(messageType = "info",
-                title = "Video output", 
-                subtitle = "This widget allows to choose the extension of the upscaled video",
-                default_value = ".mp4 (x264)",
-                option_list = option_list)
+    CTkMessageBox(
+        messageType = "info",
+        title = "Video output",
+        subtitle = "This widget allows to choose the extension of the upscaled video",
+        default_value = default_video_extension,
+        option_list = option_list
+    )
 
 def open_info_save_frames():
     option_list = [
@@ -1756,19 +1544,42 @@ def open_info_save_frames():
                     default_value = "Enabled",
                     option_list = option_list)
 
+def open_info_input_resolution():
+    option_list = [
+        " A high value (>70%) will create high quality videos but will be slower",
+        " While a low value (<40%) will create good quality videos but will much faster",
+
+        " \n For example, for a 1080p (1920x1080) video\n" + 
+        " • Input resolution 25% => input to AI 270p (480x270)\n" +
+        " • Input resolution 50% => input to AI 540p (960x540)\n" + 
+        " • Input resolution 75% => input to AI 810p (1440x810)\n" + 
+        " • Input resolution 100% => input to AI 1080p (1920x1080) \n",
+    ]
+
+    CTkMessageBox(
+        messageType = "info",
+        title       = "Input resolution %",
+        subtitle    = "This widget allows to choose the resolution input to the AI",
+        default_value = default_resize_factor,
+        option_list   = option_list
+    )
+
 def open_info_cpu():
     option_list = [
         " When possible the app will use the number of cpus selected",
-        " Currently this value is only used for the video encoding phase",
+
+        "\n Currently this value is used for: \n" +
+        "  • video frames extraction \n" +
+        "  • video encoding \n",
     ]
 
-    default_cpus = str(int(os_cpu_count()/2))
-
-    CTkMessageBox(messageType = "info",
-                    title = "Cpu number",
-                    subtitle = "This widget allows to choose how many cpus to devote to the app",
-                    default_value = default_cpus,
-                    option_list = option_list)
+    CTkMessageBox(
+        messageType = "info",
+        title       = "Cpu number",
+        subtitle    = "This widget allows to choose how many cpus to devote to the app",
+        default_value = default_cpu_number,
+        option_list   = option_list
+    )
 
 
 
@@ -1786,11 +1597,18 @@ def open_files_action():
     print("> Uploaded files: " + str(uploaded_files_counter) + " => Supported files: " + str(supported_files_counter))
 
     if supported_files_counter > 0:
-
         global scrollable_frame_file_list
-        scrollable_frame_file_list = ScrollableImagesTextFrame(
-            master = window, 
+
+        try:
+            resize_factor = int(float(str(selected_resize_factor.get())))
+        except:
+            resize_factor = 0
+
+        scrollable_frame_file_list = ScrollableImagesTextFrame_framegeneration(
+            master             = window, 
             selected_file_list = supported_files_list,
+            resize_factor      = resize_factor,
+            frame_generation_factor = selected_frame_generation_option,
             fg_color = dark_color, 
             bg_color = dark_color
         )
@@ -1808,18 +1626,20 @@ def open_files_action():
         info_message.set("Not supported files :(")
 
 def place_github_button():
-    git_button = CTkButton(master      = window, 
-                            command    = opengithub,
-                            image      = logo_git,
-                            width         = 30,
-                            height        = 30,
-                            border_width  = 1,
-                            fg_color      = "transparent",
-                            text_color    = "#C0C0C0",
-                            border_color  = "#404040",
-                            anchor        = "center",                           
-                            text          = "", 
-                            font          = bold11)
+    git_button = CTkButton(
+        master     = window, 
+        command    = opengithub,
+        image      = logo_git,
+        width         = 30,
+        height        = 30,
+        border_width  = 1,
+        fg_color      = "transparent",
+        text_color    = "#C0C0C0",
+        border_color  = "#404040",
+        anchor        = "center",                           
+        text          = "", 
+        font          = bold11
+    )
     
     git_button.place(relx = 0.045, rely = 0.87, anchor = "center")
 
@@ -1905,35 +1725,32 @@ def place_AI_menu():
 
 def place_framegeneration_option_menu():
 
-    fluidity_option_button = create_info_button(open_info_fluidity_option, "AI frame generation")
-    fluidity_option_menu   = create_option_menu(select_framegeneration_option_from_menu, fluidity_options_list)
+    fluidity_option_button = create_info_button(open_info_frame_generation_option, "AI frame generation")
+    fluidity_option_menu   = create_option_menu(select_framegeneration_option_from_menu, frame_generation_options_list)
 
     fluidity_option_button.place(relx = column0_x, rely = row2_y - 0.05, anchor = "center")
     fluidity_option_menu.place(relx = column0_x, rely = row2_y, anchor = "center")
 
 def place_gpu_menu():
-
     gpu_button = create_info_button(open_info_gpu, "GPU")
-    gpu_menu   = create_option_menu(select_AI_device_from_menu, gpu_list_names)
+    gpu_menu   = create_option_menu(select_gpu_from_menu, gpus_list)
     
-    gpu_button.place(relx = column0_x, rely = row3_y - 0.053, anchor = "center")
-    gpu_menu.place(relx = column0_x, rely  = row3_y, anchor = "center")
+    gpu_button.place(relx = column1_x, rely = row1_y - 0.053, anchor = "center")
+    gpu_menu.place(relx = column1_x, rely  = row1_y, anchor = "center")
 
-def place_AI_output_menu():
-
-    file_extension_button = create_info_button(open_info_AI_output, "AI output")
+def place_image_output_menu():
+    file_extension_button = create_info_button(open_info_AI_output, "Image output")
     file_extension_menu   = create_option_menu(select_image_extension_from_menu, image_extension_list)
     
-    file_extension_button.place(relx = column1_x, rely = row0_y - 0.053, anchor = "center")
-    file_extension_menu.place(relx = column1_x, rely = row0_y, anchor = "center")
+    file_extension_button.place(relx = column2_x, rely = row1_y - 0.05, anchor = "center")
+    file_extension_menu.place(relx = column2_x, rely = row1_y, anchor = "center")
 
 def place_video_extension_menu():
-
     video_extension_button = create_info_button(open_info_video_extension, "Video output")
     video_extension_menu   = create_option_menu(select_video_extension_from_menu, video_extension_list)
     
-    video_extension_button.place(relx = column1_x, rely = row1_y - 0.053, anchor = "center")
-    video_extension_menu.place(relx = column1_x, rely = row1_y, anchor = "center")
+    video_extension_button.place(relx = column2_x, rely = row2_y - 0.05, anchor = "center")
+    video_extension_menu.place(relx = column2_x, rely = row2_y, anchor = "center")
 
 def place_save_frames_menu():
 
@@ -1944,80 +1761,68 @@ def place_save_frames_menu():
     save_frames_menu.place(relx = column1_x, rely = row2_y, anchor = "center")
 
 def place_input_resolution_textbox():
-
     resize_factor_button  = create_info_button(open_info_input_resolution, "Input resolution %")
     resize_factor_textbox = create_text_box(selected_resize_factor) 
 
-    resize_factor_button.place(relx = column1_x, rely = row3_y - 0.053, anchor = "center")
-    resize_factor_textbox.place(relx = column1_x, rely = row3_y, anchor = "center")
+    resize_factor_button.place(relx = column0_x, rely = row3_y - 0.05, anchor = "center")
+    resize_factor_textbox.place(relx = column0_x, rely = row3_y, anchor = "center")
 
 def place_cpu_textbox():
-
     cpu_button  = create_info_button(open_info_cpu, "CPU number")
     cpu_textbox = create_text_box(selected_cpu_number)
 
-    cpu_button.place(relx = column2_x, rely = row0_y - 0.053, anchor = "center")
-    cpu_textbox.place(relx = column2_x, rely = row0_y, anchor = "center")
+    cpu_button.place(relx = column1_x, rely = row3_y - 0.05, anchor = "center")
+    cpu_textbox.place(relx = column1_x, rely  = row3_y, anchor = "center")
 
 def place_message_label():
+    message_label = CTkLabel(
+        master  = window, 
+        textvariable = info_message,
+        height       = 25,
+        font         = bold11,
+        fg_color     = "#ffbf00",
+        text_color   = "#000000",
+        anchor       = "center",
+        corner_radius = 12
+    )
+    message_label.place(relx = column2_x, rely = row4_y - 0.075, anchor = "center")
 
-    message_label = CTkLabel(master  = window, 
-                            textvariable = info_message,
-                            height       = 25,
-                            font         = bold11,
-                            fg_color     = "#ffbf00",
-                            text_color   = "#000000",
-                            anchor       = "center",
-                            corner_radius = 12)
-    message_label.place(relx = column2_x, rely = row2_y, anchor = "center")
+def place_stop_button(): 
+    stop_button = CTkButton(
+        master     = window,
+        command    = stop_button_command, 
+        image      = stop_icon,
+        text       = "STOP",
+        width      = 140,
+        height     = 30,
+        font       = bold11,
+        border_width = 1,
+        fg_color     = "#282828",
+        text_color   = "#E0E0E0",
+        border_color = "#EC1D1D"
+    )
+    stop_button.place(relx = column2_x, rely = row4_y, anchor = "center")
 
 def place_fluidify_button(): 
 
-    fluidify_button = CTkButton(master     = window,
-                                command    = fludify_button_command, 
-                                image      = play_icon,
-                                text       = "FLUIDIFY",
-                                width      = 140,
-                                height     = 30,
-                                font       = bold11,
-                                border_width = 1,
-                                fg_color     = "#282828",
-                                text_color   = "#E0E0E0",
-                                border_color = "#0096FF")
-    fluidify_button.place(relx = column2_x, rely = row3_y, anchor = "center")
+    fluidify_button = CTkButton(
+        master     = window, 
+        command    = fludify_button_command,
+        image      = play_icon,
+        text       = "FLUIDIFY",
+        width      = 140,
+        height     = 30,
+        font       = bold11,
+        border_width = 1,
+        fg_color     = "#282828",
+        text_color   = "#E0E0E0",
+        border_color = "#0096FF"
+    )
+    fluidify_button.place(relx = column2_x, rely = row4_y, anchor = "center")
+ 
 
-def place_stop_button(): 
-
-    stop_button = CTkButton(master     = window,
-                            command    = stop_button_command, 
-                            image      = stop_icon,
-                            text       = "STOP",
-                            width      = 140,
-                            height     = 30,
-                            font       = bold11,
-                            border_width = 1,
-                            fg_color     = "#282828",
-                            text_color   = "#E0E0E0",
-                            border_color = "#EC1D1D")
-    stop_button.place(relx = column2_x, rely = row3_y, anchor = "center")
-
-   
 
 # Main functions ---------------------------
-
-class Gpu:
-    def __init__(
-            self, 
-            index: int, 
-            name: str, 
-            memory: any, 
-            float64: bool
-            ) -> None:
-        
-        self.index: int    = index
-        self.name: str     = name
-        self.memory: any   = memory
-        self.float64: bool = float64
 
 def on_app_close():
     window.grab_release()
@@ -2046,7 +1851,7 @@ class App():
         place_framegeneration_option_menu()
         place_gpu_menu()
 
-        place_AI_output_menu()
+        place_image_output_menu()
         place_video_extension_menu()
         place_save_frames_menu()
         place_input_resolution_textbox()
@@ -2065,54 +1870,43 @@ if __name__ == "__main__":
     set_appearance_mode("Dark")
     set_default_color_theme("dark-blue")
 
-    gpu_list_names = []
-    gpu_list = []
-    how_many_gpus = directml_device_count()
-    for index in range(how_many_gpus): 
-        gpu_index   = index
-        gpu_name    = directml_device_name(index)
-        gpu_memory  = directml_gpu_memory(index)
-        gpu_float64 = directml_has_float64_support(index)
-        gpu = Gpu(gpu_index, gpu_name, gpu_memory, gpu_float64)
-
-        gpu_list.append(gpu)
-        gpu_list_names.append(gpu_name)
+    ffmpeg_exe_path = find_by_relative_path(f"Assets{os_separator}ffmpeg_6.1.1_e.exe")
+    if os_path_exists(ffmpeg_exe_path):
+        print(f"Found external ffmpeg.exe")
+        os_environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe_path
 
     window = CTk() 
 
     global selected_file_list
     global selected_AI_model
-    global selected_fluidity_option
-    global selected_AI_device 
+    global selected_frame_generation_option
+    global selected_gpu 
     global selected_save_frames
     global resize_factor
     global cpu_number
-
     global selected_image_extension
     global selected_video_extension
 
     selected_file_list = []
 
-    selected_AI_device = 0
-    selected_AI_model = AI_models_list[0]
-    selected_fluidity_option = fluidity_options_list[0]
-    selected_image_extension = image_extension_list[0]
-    selected_video_extension = video_extension_list[0]
+    selected_AI_model                = default_AI_model
+    selected_frame_generation_option = default_frame_generation_option
+    selected_gpu                     = default_gpu
+    selected_image_extension         = default_image_extension
+    selected_video_extension         = default_video_extension
 
-    if save_frames_list[0] == "Disabled": 
-        selected_save_frames = False
-    elif save_frames_list[0] == "Enabled":  
-        selected_save_frames = True
+    selected_save_frames = True if default_save_frames == "Enabled" else False
 
     info_message            = StringVar()
     selected_resize_factor  = StringVar()
     selected_cpu_number     = StringVar()
 
-    info_message.set("Hi :)")
+    selected_resize_factor.set(default_resize_factor)
+    selected_cpu_number.set(default_cpu_number)
 
-    selected_resize_factor.set("60")
-    cpu_count = str(int(os_cpu_count()/2))
-    selected_cpu_number.set(cpu_count)
+    info_message.set("Hi :)")
+    selected_resize_factor.trace_add('write', update_file_widget)
+
 
     font   = "Segoe UI"    
     bold8  = CTkFont(family = font, size = 8, weight = "bold")
