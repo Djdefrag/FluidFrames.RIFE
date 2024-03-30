@@ -10,12 +10,12 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/a4113e5f-68e7-484e-ba2f-0d78cfcdc4f3"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/c2bd4f6a-b41b-4b18-adf6-b04fdde6f808"> </a> 
 </div>
 
 
 ## What is FluidFrames.RIFE?
-FluidFrames.RIFE is a Windows app powered by RIFE AI to fluidify videos and to create slowmotion videos.
+FluidFrames.RIFE is a Windows app powered by RIFE AI to create frame-generated and slowmotion videos.
 
 ## Other AI projects.🤓
 - https://github.com/Djdefrag/QualityScaler / QualityScaler - image/video AI upscaler app
@@ -29,10 +29,10 @@ FluidFrames.RIFE is a Windows app powered by RIFE AI to fluidify videos and to c
 
 FluidFrames.RIFE is completely written in Python, from backend to frontend. 
 External packages are:
-- AI  -> torch / torch-directml
+- AI  -> torch / onnxruntime-directml
 - GUI -> customtkinter
-- Image/video -> openCV / moviepy
-- Packaging   -> nuitka
+- Image/video -> OpenCV / moviepy
+- Packaging   -> Nuitka
 
 ## Requirements. 🤓
 - [ ] Windows 11 / Windows 10
@@ -68,12 +68,13 @@ External packages are:
     - [x] Save AI generated frames as files
     - [x] Support RIFE AI model updates
     - [x] Support for RIFE_Lite AI model (a faster and lighter version of RIFE) 
-    - [ ] Python 3.11 (expecting ~30% more performance)
-    - [ ] Torch/torch-directml 2.0 (expecting ~20% more performance)
 - [ ] 3.x versions (now under development)
-    - [ ] New AI engine powered by onnxruntime-directml (https://pypi.org/project/onnxruntime-directml/)
-    - [ ] Python 3.11 (~25% performance improvements)
-    - [ ] Video frame generation pause and restart  
+    - [x] New AI engine powered by onnxruntime-directml (https://pypi.org/project/onnxruntime-directml/)
+    - [x] Python 3.11 (~10% performance improvements)
+    - [x] Display frame-generated videos info in the GUI
+    - [ ] FFMPEG 6.1.1 (latest release)
+    - [ ] Python 3.12
+    - [ ] Video frame-generation pause and restart
 
 
 ### Some Examples.
