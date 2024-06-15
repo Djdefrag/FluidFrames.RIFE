@@ -7,7 +7,7 @@ from webbrowser import open as open_browser
 from shutil     import rmtree as remove_directory
 from timeit     import default_timer as timer
 
-from typing import Callable
+from typing    import Callable
 from threading import Thread
 from multiprocessing.pool import ThreadPool
 from multiprocessing import ( 
@@ -25,6 +25,7 @@ from os import (
 )
 
 from os.path import (
+    basename as os_path_basename,
     dirname  as os_path_dirname,
     abspath  as os_path_abspath,
     join     as os_path_join,
@@ -38,12 +39,12 @@ from PIL.Image import (
     fromarray as pillow_image_fromarray
 )
 
-from moviepy.editor import VideoFileClip 
+from moviepy.editor   import VideoFileClip 
 from moviepy.video.io import ImageSequenceClip 
 
-from onnx import load as onnx_load 
+from onnx        import load as onnx_load 
 from onnxruntime import (
-    InferenceSession as onnxruntime_inferenceSession 
+    InferenceSession as onnxruntime_inferenceSession
 )
 
 from cv2 import (
@@ -79,6 +80,7 @@ from numpy import (
 
 # GUI imports
 from tkinter import StringVar
+from tkinter import DISABLED
 from customtkinter import (
     CTk,
     CTkButton,
@@ -97,19 +99,22 @@ from customtkinter import (
 if sys.stdout is None: sys.stdout = open(os_devnull, "w")
 if sys.stderr is None: sys.stderr = open(os_devnull, "w")
 
+def find_by_relative_path(relative_path: str) -> str:
+    base_path = getattr(sys, '_MEIPASS', os_path_dirname(os_path_abspath(__file__)))
+    return os_path_join(base_path, relative_path)
 
-app_name     = "FluidFrames"
-second_title = "RIFE"
-version      = "3.3"
 
-dark_color   = "#080808"
+
+app_name   = "FluidFrames"
+version    = "3.6"
+dark_color = "#080808"
 
 githubme   = "https://github.com/Djdefrag/FluidFrames.RIFE"
 telegramme = "https://linktr.ee/j3ngystudio"
 
-AI_models_list                = [ 'RIFE_4.13', 'RIFE_4.13_Lite' ]
+AI_models_list                = [ 'RIFE_4.17', 'RIFE_4.15_Lite' ]
 frame_generation_options_list = [ 'x2', 'x4', 'x8', 'x2-slowmotion', 'x4-slowmotion', 'x8-slowmotion' ]
-gpus_list                     = [ 'High performance', 'Power saving']
+gpus_list                     = [ 'GPU 1', 'GPU 2', 'GPU 3', 'GPU 4' ]
 image_extension_list          = [ '.jpg', '.png', '.bmp', '.tiff' ]
 video_extension_list          = [ '.mp4 (x264)', '.mp4 (x265)', '.avi' ]
 save_frames_list              = [ 'Enabled', 'Disabled' ]
@@ -121,9 +126,17 @@ default_frame_generation_option = frame_generation_options_list[0]
 default_image_extension         = image_extension_list[0]
 default_video_extension         = video_extension_list[0]
 default_save_frames             = save_frames_list[0]
+default_output_path             = "Same path as input files"
 default_resize_factor           = str(50)
 default_VRAM_limiter            = str(8)
 default_cpu_number              = str(int(os_cpu_count()/2))
+
+FFMPEG_EXE_PATH   = find_by_relative_path(f"Assets{os_separator}ffmpeg.exe")
+FRAMES_FOR_CPU    = 30
+
+COMPLETED_STATUS = "Completed"
+ERROR_STATUS     = "Error"
+STOP_STATUS      = "Stop"
 
 offset_y_options = 0.105
 row0_y = 0.52
@@ -136,35 +149,36 @@ offset_x_options = 0.28
 column1_x = 0.5
 column0_x = column1_x - offset_x_options
 column2_x = column1_x + offset_x_options
-
-COMPLETED_STATUS = "Completed"
-ERROR_STATUS = "Error"
-STOP_STATUS = "Stop"
+column1_5_x = column1_x + offset_x_options/2
 
 if sys.stdout is None: sys.stdout = open(os_devnull, "w")
 if sys.stderr is None: sys.stderr = open(os_devnull, "w")
 
-supported_file_extensions = ['.mp4', '.MP4',
-                            '.webm', '.WEBM',
-                            '.mkv', '.MKV',
-                            '.flv', '.FLV',
-                            '.gif', '.GIF',
-                            '.m4v', ',M4V',
-                            '.avi', '.AVI',
-                            '.mov', '.MOV',
-                            '.qt', '.3gp', 
-                            '.mpg', '.mpeg']
+supported_file_extensions = [
+    '.mp4', '.MP4',
+    '.webm', '.WEBM',
+    '.mkv', '.MKV',
+    '.flv', '.FLV',
+    '.gif', '.GIF',
+    '.m4v', ',M4V',
+    '.avi', '.AVI',
+    '.mov', '.MOV',
+    '.qt', '.3gp', 
+    '.mpg', '.mpeg'
+    ]
 
-supported_video_extensions  = ['.mp4', '.MP4',
-                                '.webm', '.WEBM',
-                                '.mkv', '.MKV',
-                                '.flv', '.FLV',
-                                '.gif', '.GIF',
-                                '.m4v', ',M4V',
-                                '.avi', '.AVI',
-                                '.mov', '.MOV',
-                                '.qt', '.3gp', 
-                                '.mpg', '.mpeg']
+supported_video_extensions = [
+    '.mp4', '.MP4',
+    '.webm', '.WEBM',
+    '.mkv', '.MKV',
+    '.flv', '.FLV',
+    '.gif', '.GIF',
+    '.m4v', ',M4V',
+    '.avi', '.AVI',
+    '.mov', '.MOV',
+    '.qt', '.3gp', 
+    '.mpg', '.mpeg'
+    ]
 
 
 
@@ -175,17 +189,22 @@ def load_AI_model(
         selected_gpu: str,
     ) -> onnxruntime_inferenceSession:
 
-    AI_model_loaded = onnx_load(find_by_relative_path(f"AI-onnx{os_separator}{selected_AI_model}.onnx"))
+    AI_model_path   = find_by_relative_path(f"AI-onnx{os_separator}{selected_AI_model}.onnx")
+    AI_model_loaded = onnx_load(AI_model_path)
 
     match selected_gpu:
-        case "High performance":
-            providers = [('DmlExecutionProvider', {'performance_preference': 'high_performance'})]
-        case "Power saving":
-            providers = [('DmlExecutionProvider', {'performance_preference': 'minimum_power'})]
+        case 'GPU 1':
+            backend = [('DmlExecutionProvider', {"device_id": "0"})]
+        case 'GPU 2':
+            backend = [('DmlExecutionProvider', {"device_id": "1"})]
+        case 'GPU 3':
+            backend = [('DmlExecutionProvider', {"device_id": "2"})]
+        case 'GPU 4':
+            backend = [('DmlExecutionProvider', {"device_id": "3"})]
     
     AI_model = onnxruntime_inferenceSession(
         path_or_bytes = AI_model_loaded.SerializeToString(), 
-        providers = providers
+        providers     = backend
     )    
 
     return AI_model
@@ -222,9 +241,9 @@ def process_image_with_AI_model(
     return output_squeezed_clamped_transposed
 
 def AI_interpolation(
-    AI_model: onnxruntime_inferenceSession, 
-    frame_1: numpy_ndarray,
-    frame_2: numpy_ndarray
+        AI_model: onnxruntime_inferenceSession, 
+        frame_1: numpy_ndarray,
+        frame_2: numpy_ndarray
     ) -> numpy_ndarray:
 
     concatenated_frames = concatenate_frames(frame_1, frame_2).astype(float32)
@@ -236,8 +255,8 @@ def AI_interpolation(
     return output_frame
 
 def save_multiple_frames_async(
-    frames_to_save: list[numpy_ndarray],
-    frame_paths_to_save: list[str]
+        frames_to_save: list[numpy_ndarray],
+        frame_paths_to_save: list[str]
     ) -> None:
     
     for index in range(len(frames_to_save)):
@@ -254,7 +273,7 @@ def AI_generate_frames(
         frame_2_name: str,
         frame_base_name: str,
         all_video_frames_path_list: list,
-        selected_output_file_extension: str, 
+        selected_image_extension: str, 
         fluidification_factor: int
         ) -> list:
     
@@ -265,7 +284,7 @@ def AI_generate_frames(
 
     if frames_to_generate == 1: 
         # fluidification x2
-        frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
+        frame_1_1_name = f"{frame_base_name}_.1{selected_image_extension}"
         frame_1_1 = AI_interpolation(AI_model, frame1, frame2)        
         
         frames_to_save.extend([frame1, frame_1_1, frame2])
@@ -274,9 +293,9 @@ def AI_generate_frames(
 
     elif frames_to_generate == 3: 
         # fluidification x4
-        frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
-        frame_1_2_name = f"{frame_base_name}_.2{selected_output_file_extension}"
-        frame_1_3_name = f"{frame_base_name}_.3{selected_output_file_extension}"
+        frame_1_1_name = f"{frame_base_name}_.1{selected_image_extension}"
+        frame_1_2_name = f"{frame_base_name}_.2{selected_image_extension}"
+        frame_1_3_name = f"{frame_base_name}_.3{selected_image_extension}"
 
         frame_1_2 = AI_interpolation(AI_model, frame1, frame2)
         frame_1_1 = AI_interpolation(AI_model, frame1, frame_1_2)
@@ -288,13 +307,13 @@ def AI_generate_frames(
 
     elif frames_to_generate == 7: 
         # fluidification x8
-        frame_1_1_name = f"{frame_base_name}_.1{selected_output_file_extension}"
-        frame_1_2_name = f"{frame_base_name}_.2{selected_output_file_extension}"
-        frame_1_3_name = f"{frame_base_name}_.3{selected_output_file_extension}"
-        frame_1_4_name = f"{frame_base_name}_.4{selected_output_file_extension}"
-        frame_1_5_name = f"{frame_base_name}_.5{selected_output_file_extension}"
-        frame_1_6_name = f"{frame_base_name}_.6{selected_output_file_extension}"
-        frame_1_7_name = f"{frame_base_name}_.7{selected_output_file_extension}"
+        frame_1_1_name = f"{frame_base_name}_.1{selected_image_extension}"
+        frame_1_2_name = f"{frame_base_name}_.2{selected_image_extension}"
+        frame_1_3_name = f"{frame_base_name}_.3{selected_image_extension}"
+        frame_1_4_name = f"{frame_base_name}_.4{selected_image_extension}"
+        frame_1_5_name = f"{frame_base_name}_.5{selected_image_extension}"
+        frame_1_6_name = f"{frame_base_name}_.6{selected_image_extension}"
+        frame_1_7_name = f"{frame_base_name}_.7{selected_image_extension}"
 
         frame_1_4 = AI_interpolation(AI_model, frame1, frame2)
         frame_1_2 = AI_interpolation(AI_model, frame1, frame_1_4)
@@ -350,12 +369,12 @@ class CTkMessageBox(CTkToplevel):
         self._ctkwidgets_index = 0
 
         self.title('')
-        self.lift()                          # lift window on top
-        self.attributes("-topmost", True)    # stay on top
+        self.lift()                         
+        self.attributes("-topmost", True)
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
-        self.after(10, self._create_widgets)  # create widgets with slight delay, to avoid white flickering of background
+        self.after(10, self._create_widgets)
         self.resizable(False, False)
-        self.grab_set()                       # make other windows not clickable
+        self.grab_set()                       
 
     def _ok_event(self) -> None:
         self.grab_release()
@@ -515,7 +534,7 @@ class ScrollableImagesTextFrame_framegeneration(CTkScrollableFrame):
             self, 
             text       = infos,
             image      = icon, 
-            font       = bold11,
+            font       = bold12,
             text_color = "#C0C0C0",
             compound   = "left", 
             anchor     = "w",
@@ -557,20 +576,19 @@ class ScrollableImagesTextFrame_framegeneration(CTkScrollableFrame):
 
     @cache
     def extract_file_icon(self, file_path) -> CTkImage:
+        max_size = 50
+
         if check_if_file_is_video(file_path):
             cap = opencv_VideoCapture(file_path)
             _, frame = cap.read()
             frame = opencv_cvtColor(frame, COLOR_BGR2RGB)
-            max_size = 50
             ratio = min(max_size / frame.shape[0], max_size / frame.shape[1])
-            new_width = int(frame.shape[1] * ratio)
-            new_height = int(frame.shape[0] * ratio)
-            video_icon = CTkImage(
+            icon = CTkImage(
                 pillow_image_fromarray(frame, mode="RGB"), 
-                size = (new_width, new_height)
+                size = (int(frame.shape[1] * ratio), int(frame.shape[0] * ratio))
             )
             cap.release()
-            return video_icon
+            return icon
 
     def extract_file_info(self, file_path) -> tuple:
         
@@ -657,7 +675,11 @@ def update_file_widget(a, b, c) -> None:
     scrollable_frame_file_list.set_frame_generation_factor(selected_frame_generation_option)
     scrollable_frame_file_list._create_widgets()
 
-def create_info_button(command: Callable, text: str) -> CTkButton:
+def create_info_button(
+        command: Callable, 
+        text: str,
+        width: int = 150
+        ) -> CTkButton:
     
     return CTkButton(
         master  = window, 
@@ -668,7 +690,7 @@ def create_info_button(command: Callable, text: str) -> CTkButton:
         text_color    = "#C0C0C0",
         anchor        = "w",
         height        = 22,
-        width         = 150,
+        width         = width,
         corner_radius = 10,
         font          = bold12,
         image         = info_icon
@@ -708,16 +730,51 @@ def create_text_box(textvariable: StringVar) -> CTkEntry:
         border_color  = "#404040",
     )
 
+def create_text_box_output_path(
+        textvariable: StringVar
+        ) -> CTkEntry:
+
+    return CTkEntry(
+        master        = window, 
+        textvariable  = textvariable,
+        border_width  = 1,
+        corner_radius = 6,
+        width         = 300,
+        height        = 30,
+        font          = bold11,
+        justify       = "center",
+        text_color    = "#C0C0C0",
+        fg_color      = "#000000",
+        border_color  = "#404040",
+        state         = DISABLED
+    )
+
+def create_active_button(
+        command: Callable,
+        text: str,
+        icon: CTkImage = None,
+        width: int = 140,
+        height: int = 30,
+        border_color: str = "#0096FF"
+        ) -> CTkButton:
+    
+    return CTkButton(
+        master     = window, 
+        command    = command,
+        text       = text,
+        image      = icon,
+        width      = width,
+        height     = height,
+        font         = bold11,
+        border_width = 1,
+        fg_color     = "#282828",
+        text_color   = "#E0E0E0",
+        border_color = border_color
+    )
+
 
 
 # File Utils functions ------------------------
-
-def find_by_relative_path(
-        relative_path: str
-        ) -> str:
-    
-    base_path = getattr(sys, '_MEIPASS', os_path_dirname(os_path_abspath(__file__)))
-    return os_path_join(base_path, relative_path)
 
 def image_write(
         file_path: str, 
@@ -728,41 +785,26 @@ def image_write(
     opencv_imencode(file_extension, file_data)[1].tofile(file_path)
 
 def image_read(
-    file_path: str, 
-    flags: int = IMREAD_UNCHANGED
-    ) -> numpy_ndarray: 
+        file_path: str, 
+        flags: int = IMREAD_UNCHANGED
+        ) -> numpy_ndarray: 
     
     with open(file_path, 'rb') as file:
-        file_data = file.read()
+        file_data      = file.read()
         numpy_buffer   = numpy_frombuffer(file_data, uint8)
         opencv_decoded = opencv_imdecode(numpy_buffer, flags)
         return opencv_decoded
 
-def remove_dir(
-        name_dir: str
-        ) -> None:
-    
-    if os_path_exists(name_dir): 
-        remove_directory(name_dir)
+def remove_dir(name_dir: str) -> None:
+    if os_path_exists(name_dir): remove_directory(name_dir)
 
-def create_dir(
-        name_dir: str
-        ) -> None:
-    
-    if os_path_exists(name_dir): 
-        remove_directory(name_dir)
-    if not os_path_exists(name_dir): 
-        os_makedirs(name_dir, mode=0o777)
+def create_dir(name_dir: str) -> None:
+    if os_path_exists(name_dir):     remove_directory(name_dir)
+    if not os_path_exists(name_dir): os_makedirs(name_dir, mode=0o777)
 
 
 
 # Image/video Utils functions ------------------------
-
-def get_image_resolution(image: numpy_ndarray) -> tuple:
-    height = image.shape[0]
-    width  = image.shape[1]
-
-    return height, width 
 
 def resize_frames(
         frame_1: numpy_ndarray, 
@@ -789,8 +831,11 @@ def extract_video_fps(
     return frame_rate
 
 def extract_video_frames_and_audio(
+        processing_queue: multiprocessing_Queue,
+        file_number: int,
         target_directory: str,
         video_path: str, 
+        selected_image_extension: str,
         cpu_number: int
     ) -> tuple[list[str], str]:
 
@@ -799,14 +844,14 @@ def extract_video_frames_and_audio(
     # Audio extraction
     with VideoFileClip(video_path) as video_file_clip:
         try: 
+            write_process_status(processing_queue, f"{file_number}. Extracting video audio")
             audio_path = f"{target_directory}{os_separator}audio.mp3"
             video_file_clip.audio.write_audiofile(audio_path, verbose = False, logger = None)
         except:
             pass
 
     # Video frame extraction
-    frames_for_cpu = 30
-    frames_number_to_save = cpu_number * frames_for_cpu
+    frames_number_to_save = cpu_number * FRAMES_FOR_CPU
 
     video_capture = opencv_VideoCapture(video_path)
     frame_count   = int(video_capture.get(CAP_PROP_FRAME_COUNT))
@@ -820,11 +865,14 @@ def extract_video_frames_and_audio(
         if success:
             frames_to_save.append(frame)
             
-            frame_path = f"{target_directory}{os_separator}frame_{frame_number:03d}.jpg"
+            frame_path = f"{target_directory}{os_separator}frame_{frame_number:03d}{selected_image_extension}"
             frames_path_to_save.append(frame_path)
             video_frames_list.append(frame_path)
 
             if len(frames_to_save) == frames_number_to_save:
+                percentage_extraction = (frame_number / frame_count) * 100
+                write_process_status(processing_queue, f"{file_number}. Extracting video frames ({round(percentage_extraction, 2)}%)")
+
                 pool = ThreadPool(cpu_number)
                 pool.starmap(image_write, zip(frames_path_to_save, frames_to_save))
                 pool.close()
@@ -845,6 +893,7 @@ def extract_video_frames_and_audio(
 def video_reconstruction_by_frames(
         video_path: str, 
         audio_path: str,
+        selected_output_path: str,
         all_video_frames_paths: list, 
         selected_AI_model: str,
         fluidification_factor: int,
@@ -856,8 +905,7 @@ def video_reconstruction_by_frames(
     
     frame_rate = extract_video_fps(video_path)
 
-    if not slowmotion: 
-        frame_rate = frame_rate * fluidification_factor
+    if not slowmotion: frame_rate = frame_rate * fluidification_factor
 
     match selected_video_extension:
         case '.mp4 (x264)':
@@ -870,8 +918,9 @@ def video_reconstruction_by_frames(
             selected_video_extension = '.avi'
             codec = 'png'
 
-    upscaled_video_path = prepare_output_video_filename(
+    output_path = prepare_output_video_filename(
         video_path, 
+        selected_output_path,
         selected_AI_model,
         fluidification_factor, 
         slowmotion, 
@@ -882,36 +931,27 @@ def video_reconstruction_by_frames(
     clip = ImageSequenceClip.ImageSequenceClip(all_video_frames_paths, fps = frame_rate)
     if slowmotion:
         clip.write_videofile(
-            upscaled_video_path,
+            output_path,
             fps     = frame_rate,
             codec   = codec,
             bitrate = '16M',
             verbose = False,
             logger  = None,
-            threads = cpu_number
+            threads = cpu_number,
+            preset  = "ultrafast"
         ) 
     else:
-        if os_path_exists(audio_path):
-            clip.write_videofile(
-                upscaled_video_path,
-                fps     = frame_rate,
-                audio   = audio_path,
-                codec   = codec,
-                bitrate = '16M',
-                verbose = False,
-                logger  = None,
-                threads = cpu_number
-            )
-        else:
-            clip.write_videofile(
-                upscaled_video_path,
-                fps     = frame_rate,
-                codec   = codec,
-                bitrate = '16M',
-                verbose = False,
-                logger  = None,
-                threads = cpu_number
-            )      
+        clip.write_videofile(
+            output_path,
+            fps     = frame_rate,
+            audio   = audio_path if os_path_exists(audio_path) else None,
+            codec   = codec,
+            bitrate = '16M',
+            verbose = False,
+            logger  = None,
+            threads = cpu_number,
+            preset  = "ultrafast"
+        )    
 
 def calculate_time_to_complete_video(
         time_for_frame: float,
@@ -1021,6 +1061,7 @@ def stop_button_command() -> None:
 
 def prepare_output_video_filename(
         video_path: str, 
+        selected_output_path: str,
         selected_AI_model: str,
         fluidification_factor: int, 
         slowmotion: bool, 
@@ -1028,7 +1069,12 @@ def prepare_output_video_filename(
         selected_video_extension: str
         ) -> str:
     
-    result_path, _ = os_path_splitext(video_path)
+    if selected_output_path == default_output_path:
+        file_path_no_extension, _ = os_path_splitext(video_path)
+        output_path = file_path_no_extension
+    else:
+        file_name   = os_path_basename(video_path)
+        output_path = f"{selected_output_path}{os_separator}{file_name}"
 
     # Selected AI model
     to_append = f"_{selected_AI_model}x{str(fluidification_factor)}"
@@ -1042,19 +1088,25 @@ def prepare_output_video_filename(
     # Video output
     to_append += f"{selected_video_extension}"
 
-    result_path += to_append
+    output_path += to_append
 
-    return result_path
+    return output_path
 
 def prepare_output_video_frames_directory_name(
         video_path: str, 
+        selected_output_path: str,
         selected_AI_model: str,
         fluidification_factor: int, 
         slowmotion: bool, 
         resize_factor: int, 
         ) -> str:
     
-    result_path, _ = os_path_splitext(video_path)
+    if selected_output_path == default_output_path:
+        file_path_no_extension, _ = os_path_splitext(video_path)
+        output_path = file_path_no_extension
+    else:
+        file_name   = os_path_basename(video_path)
+        output_path = f"{selected_output_path}{os_separator}{file_name}"
 
     # Selected AI model
     to_append = f"_{selected_AI_model}x{str(fluidification_factor)}"
@@ -1065,9 +1117,9 @@ def prepare_output_video_frames_directory_name(
     # Selected resize
     to_append += f"_Resize-{str(int(resize_factor * 100))}"
 
-    result_path += to_append
+    output_path += to_append
 
-    return result_path
+    return output_path
 
 def get_video_target_resolution(
         first_video_frame: numpy_ndarray, 
@@ -1114,6 +1166,7 @@ def fludify_button_command() -> None:
         print("=" * 50)
         print(f"> Starting fluidify:")
         print(f"   Files to fluidify: {len(selected_file_list)}")
+        print(f"   Output path: {(selected_output_path.get())}")
         print(f"   Selected AI model: {selected_AI_model}")
         print(f"   Selected fluidify option: {selected_frame_generation_option}")
         print(f"   Selected image output extension: {selected_image_extension}")
@@ -1130,6 +1183,7 @@ def fludify_button_command() -> None:
             args = (
                 processing_queue, 
                 selected_file_list, 
+                selected_output_path.get(),
                 selected_AI_model,
                 selected_gpu,
                 selected_frame_generation_option, 
@@ -1150,6 +1204,7 @@ def fludify_button_command() -> None:
 def frame_generation_orchestrator(
         processing_queue: multiprocessing_Queue,
         selected_file_list: list,
+        selected_output_path: str,
         selected_AI_model: str,
         selected_gpu: str,
         selected_frame_generation_option: str,
@@ -1176,6 +1231,7 @@ def frame_generation_orchestrator(
                 processing_queue,
                 file_path, 
                 file_number,
+                selected_output_path,
                 AI_model,
                 selected_AI_model,
                 fluidification_factor, 
@@ -1196,6 +1252,7 @@ def video_frame_generation(
         processing_queue: multiprocessing_Queue,
         video_path: str, 
         file_number: int,
+        selected_output_path: str,
         AI_model: onnxruntime_inferenceSession,
         selected_AI_model: str,
         fluidification_factor: int, 
@@ -1207,22 +1264,25 @@ def video_frame_generation(
         selected_save_frames: bool
         ) -> None:
         
-    # Directory for video frames and audio
     target_directory = prepare_output_video_frames_directory_name(
         video_path, 
+        selected_output_path,
         selected_AI_model, 
         fluidification_factor, 
         slowmotion,
         resize_factor
     )
     
-    # Extract video frames and audio
     write_process_status(processing_queue, f"{file_number}. Extracting video frames")
     frame_list_paths, audio_path = extract_video_frames_and_audio(
+        processing_queue, 
+        file_number, 
         target_directory, 
-        video_path,
+        video_path, 
+        selected_image_extension,
         cpu_number
     )
+
     target_height, target_width = get_video_target_resolution(
         frame_list_paths[0], 
         resize_factor
@@ -1266,21 +1326,20 @@ def video_frame_generation(
     
         update_process_status_videos(
             processing_queue = processing_queue, 
-            file_number = file_number,  
-            frame_index = frame_index, 
-            how_many_frames = how_many_frames,
+            file_number      = file_number,  
+            frame_index      = frame_index, 
+            how_many_frames  = how_many_frames,
             average_processing_time = average_processing_time
         )
 
     all_video_frames_paths = list(dict.fromkeys(all_video_frames_paths))
-    #for _ in range(fluidification_factor-1):
-    #    all_video_frames_paths.append(all_video_frames_paths[-1])
 
     # Video reconstruction
     write_process_status(processing_queue, f"{file_number}. Processing fluidified video")  
     video_reconstruction_by_frames(
         video_path,
         audio_path,
+        selected_output_path,
         all_video_frames_paths, 
         selected_AI_model,
         fluidification_factor, 
@@ -1288,10 +1347,9 @@ def video_frame_generation(
         resize_factor, 
         cpu_number, 
         selected_video_extension
-        )
+    )
 
-    if not selected_save_frames:
-        remove_dir(target_directory)
+    if not selected_save_frames: remove_dir(target_directory)
 
 
 
@@ -1394,6 +1452,53 @@ def show_error_message(
     messageBox_text  = str(exception) + "\n\n" + "Please report the error on Github/Telegram"
     CTkMessageBox(text = messageBox_text, title = messageBox_title, type = "error")
 
+def open_files_action():
+    info_message.set("Selecting files")
+
+    uploaded_files_list    = list(filedialog.askopenfilenames())
+    uploaded_files_counter = len(uploaded_files_list)
+
+    supported_files_list    = check_supported_selected_files(uploaded_files_list)
+    supported_files_counter = len(supported_files_list)
+    
+    print("> Uploaded files: " + str(uploaded_files_counter) + " => Supported files: " + str(supported_files_counter))
+
+    if supported_files_counter > 0:
+        global scrollable_frame_file_list
+
+        try:
+            resize_factor = int(float(str(selected_resize_factor.get())))
+        except:
+            resize_factor = 0
+
+        scrollable_frame_file_list = ScrollableImagesTextFrame_framegeneration(
+            master             = window, 
+            selected_file_list = supported_files_list,
+            resize_factor      = resize_factor,
+            frame_generation_factor = selected_frame_generation_option,
+            fg_color = dark_color, 
+            bg_color = dark_color
+        )
+        
+        scrollable_frame_file_list.place(
+            relx = 0.0, 
+            rely = 0.0, 
+            relwidth  = 1.0, 
+            relheight = 0.42
+        )
+        
+        info_message.set("Ready")
+
+    else: 
+        info_message.set("Not supported files :(")
+
+def open_output_path_action():
+    asked_selected_output_path = filedialog.askdirectory()
+    if asked_selected_output_path == "":
+        selected_output_path.set(default_output_path)
+    else:
+        selected_output_path.set(asked_selected_output_path)
+
 
 
 # GUI select from menus functions ---------------------------
@@ -1433,14 +1538,31 @@ def select_save_frame_from_menu(new_value: str):
 
 # GUI info functions ---------------------------
 
+def open_info_output_path():
+    option_list = [
+        "\n The default path is defined by the input files."
+        + "\n For example uploading a file from the Download folder,"
+        + "\n the app will save the generated files in the Download folder \n",
+
+        " Otherwise it is possible to select the desired path using the SELECT button",
+    ]
+
+    CTkMessageBox(
+        messageType = "info",
+        title       = "Output path",
+        subtitle    = "This widget allows to choose upscaled files path",
+        default_value = default_output_path,
+        option_list   = option_list
+    )
+
 def open_info_AI_model():
     option_list = [
-        "\n RIFE_4.13\n" + 
+        "\n RIFE_4.17\n" + 
         "   • The complete RIFE AI model\n" + 
         "   • Excellent frame generation quality\n" + 
         "   • Recommended GPUs with VRAM >= 4GB\n",
 
-        "\n RIFE_4.13_Lite\n" + 
+        "\n RIFE_4.15_Lite\n" + 
         "   • Lightweight version of RIFE AI model\n" +
         "   • High frame generation quality\n" +
         "   • 10% faster than full model\n" + 
@@ -1448,11 +1570,13 @@ def open_info_AI_model():
         "   • Recommended for GPUs with VRAM < 4GB \n",
     ]
     
-    CTkMessageBox(messageType = "info",
-                    title = "AI model", 
-                    subtitle = " This widget allows to choose between different RIFE models",
-                    default_value = "RIFE_4.13",
-                    option_list = option_list)
+    CTkMessageBox(
+        messageType   = "info",
+        title         = "AI model", 
+        subtitle      = " This widget allows to choose between different RIFE models",
+        default_value = default_AI_model,
+        option_list   = option_list
+    )
 
 def open_info_frame_generation_option():
     option_list = [
@@ -1467,11 +1591,13 @@ def open_info_frame_generation_option():
         "   • x8-slowmotion ( slowmotion effect by a factor of 8 )\n"
     ]
     
-    CTkMessageBox(messageType = "info",
-                    title = "AI frame generation", 
-                    subtitle = " This widget allows to choose between different AI frame generation option",
-                    default_value = "x2",
-                    option_list = option_list)
+    CTkMessageBox(
+        messageType   = "info",
+        title         = "AI frame generation", 
+        subtitle      = " This widget allows to choose between different AI frame generation option",
+        default_value = default_frame_generation_option,
+        option_list   = option_list
+    )
 
 def open_info_gpu():
     option_list = [
@@ -1504,9 +1630,9 @@ def open_info_AI_output():
     ]
 
     CTkMessageBox(
-        messageType = "info",
-        title       = "Image output",
-        subtitle    = "This widget allows to choose the extension of generated frames",
+        messageType   = "info",
+        title         = "Image output",
+        subtitle      = "This widget allows to choose the extension of generated frames",
         default_value = default_image_extension,
         option_list   = option_list
     )
@@ -1525,11 +1651,11 @@ def open_info_video_extension():
     ]
 
     CTkMessageBox(
-        messageType = "info",
-        title = "Video output",
-        subtitle = "This widget allows to choose the extension of the upscaled video",
+        messageType   = "info",
+        title         = "Video output",
+        subtitle      = "This widget allows to choose the extension of the upscaled video",
         default_value = default_video_extension,
-        option_list = option_list
+        option_list   = option_list
     )
 
 def open_info_save_frames():
@@ -1538,11 +1664,13 @@ def open_info_save_frames():
         "\n DISABLED \n FluidFrames.RIFE will create only the fluidified video \n"
     ]
 
-    CTkMessageBox(messageType = "info",
-                    title = "Save frames",
-                    subtitle = "This widget allows to choose to save frames generated by the AI",
-                    default_value = "Enabled",
-                    option_list = option_list)
+    CTkMessageBox(
+        messageType   = "info",
+        title         = "Save frames",
+        subtitle      = "This widget allows to choose to save frames generated by the AI",
+        default_value = "Enabled",
+        option_list   = option_list
+    )
 
 def open_info_input_resolution():
     option_list = [
@@ -1557,9 +1685,9 @@ def open_info_input_resolution():
     ]
 
     CTkMessageBox(
-        messageType = "info",
-        title       = "Input resolution %",
-        subtitle    = "This widget allows to choose the resolution input to the AI",
+        messageType   = "info",
+        title         = "Input resolution %",
+        subtitle      = "This widget allows to choose the resolution input to the AI",
         default_value = default_resize_factor,
         option_list   = option_list
     )
@@ -1574,9 +1702,9 @@ def open_info_cpu():
     ]
 
     CTkMessageBox(
-        messageType = "info",
-        title       = "Cpu number",
-        subtitle    = "This widget allows to choose how many cpus to devote to the app",
+        messageType   = "info",
+        title         = "Cpu number",
+        subtitle      = "This widget allows to choose how many cpus to devote to the app",
         default_value = default_cpu_number,
         option_list   = option_list
     )
@@ -1584,46 +1712,6 @@ def open_info_cpu():
 
 
 # GUI place functions ---------------------------
-
-def open_files_action():
-    info_message.set("Selecting files")
-
-    uploaded_files_list    = list(filedialog.askopenfilenames())
-    uploaded_files_counter = len(uploaded_files_list)
-
-    supported_files_list    = check_supported_selected_files(uploaded_files_list)
-    supported_files_counter = len(supported_files_list)
-    
-    print("> Uploaded files: " + str(uploaded_files_counter) + " => Supported files: " + str(supported_files_counter))
-
-    if supported_files_counter > 0:
-        global scrollable_frame_file_list
-
-        try:
-            resize_factor = int(float(str(selected_resize_factor.get())))
-        except:
-            resize_factor = 0
-
-        scrollable_frame_file_list = ScrollableImagesTextFrame_framegeneration(
-            master             = window, 
-            selected_file_list = supported_files_list,
-            resize_factor      = resize_factor,
-            frame_generation_factor = selected_frame_generation_option,
-            fg_color = dark_color, 
-            bg_color = dark_color
-        )
-        
-        scrollable_frame_file_list.place(
-            relx = 0.0, 
-            rely = 0.0, 
-            relwidth  = 1.0, 
-            relheight = 0.45
-        )
-        
-        info_message.set("Ready")
-
-    else: 
-        info_message.set("Not supported files :(")
 
 def place_github_button():
     git_button = CTkButton(
@@ -1659,61 +1747,67 @@ def place_telegram_button():
     telegram_button.place(relx = 0.045, rely = 0.93, anchor = "center")
  
 def place_loadFile_section():
-    up_background = CTkLabel(master  = window, 
-                            text     = "",
-                            fg_color = dark_color,
-                            font     = bold12,
-                            anchor   = "w")
+    background = CTkLabel(
+        master   = window,
+        text     = "",
+        fg_color = dark_color
+    )
+
+    text_drop = """ SUPPORTED FILES \n\n IMAGES • jpg png tif bmp webp heic \n VIDEOS • mp4 webm mkv flv gif avi mov mpg qt 3gp """
+
+    input_file_text = CTkLabel(
+        master = window, 
+        text       = text_drop,
+        fg_color   = dark_color,
+        bg_color   = dark_color,
+        text_color = "#C0C0C0",
+        width      = 300,
+        height     = 150,
+        font       = bold12,
+        anchor     = "center"
+    )
     
-    up_background.place(relx = 0.0, 
-                        rely = 0.0, 
-                        relwidth  = 1.0,  
-                        relheight = 0.45)
-
-    text_drop = """ •  SUPPORTED FILES  •
-
-VIDEOS • mp4 webm mkv flv gif avi mov mpg qt 3gp"""
-
-    input_file_text = CTkLabel(master      = window, 
-                                text       = text_drop,
-                                fg_color   = dark_color,
-                                bg_color   = dark_color,
-                                text_color = "#C0C0C0",
-                                width      = 300,
-                                height     = 150,
-                                font       = bold12,
-                                anchor     = "center")
+    input_file_button = CTkButton(
+        master = window,
+        command  = open_files_action, 
+        text     = "SELECT FILES",
+        width    = 140,
+        height   = 30,
+        font     = bold11,
+        border_width = 1,
+        fg_color     = "#282828",
+        text_color   = "#E0E0E0",
+        border_color = "#0096FF"
+        )
     
-    input_file_button = CTkButton(master = window,
-                                command  = open_files_action, 
-                                text     = "SELECT FILES",
-                                width      = 140,
-                                height     = 30,
-                                font       = bold11,
-                                border_width = 1,
-                                fg_color     = "#282828",
-                                text_color   = "#E0E0E0",
-                                border_color = "#0096FF")
-
+    background.place(relx = 0.0, rely = 0.0, relwidth = 1.0, relheight = 0.42)
     input_file_text.place(relx = 0.5, rely = 0.20,  anchor = "center")
     input_file_button.place(relx = 0.5, rely = 0.35, anchor = "center")
 
 def place_app_name():
-    app_name_label = CTkLabel(master     = window, 
-                              text       = app_name + " " + version,
-                              text_color = "#F08080",
-                              font       = bold19,
-                              anchor     = "w")
+    app_name_label = CTkLabel(
+        master     = window,
+        text       = app_name + " " + version,
+        text_color = "#F08080",
+        font       = bold19,
+        anchor     = "w"
+    )
     
     app_name_label.place(relx = column0_x, rely = row0_y - 0.03, anchor = "center")
 
-    subtitle_app_name_label = CTkLabel(master  = window, 
-                                    text       = second_title,
-                                    text_color = "#0096FF",
-                                    font       = bold18,
-                                    anchor     = "w")
-    
-    subtitle_app_name_label.place(relx = column0_x, rely = row0_y + 0.01, anchor = "center")
+def place_output_path_textbox():
+    output_path_button  = create_info_button(open_info_output_path, "Output path", width = 300)
+    output_path_textbox = create_text_box_output_path(selected_output_path) 
+    select_output_path_button = create_active_button(
+        command = open_output_path_action,
+        text    = "SELECT",
+        width   = 85,
+        height  = 25
+    )
+  
+    output_path_button.place(relx = column1_5_x, rely = row0_y - 0.05, anchor = "center")
+    output_path_textbox.place(relx = column1_5_x, rely  = row0_y, anchor = "center")
+    select_output_path_button.place(relx = column2_x, rely  = row0_y - 0.05, anchor = "center")
 
 def place_AI_menu():
 
@@ -1788,38 +1882,26 @@ def place_message_label():
     message_label.place(relx = column2_x, rely = row4_y - 0.075, anchor = "center")
 
 def place_stop_button(): 
-    stop_button = CTkButton(
-        master     = window,
-        command    = stop_button_command, 
-        image      = stop_icon,
-        text       = "STOP",
-        width      = 140,
-        height     = 30,
-        font       = bold11,
-        border_width = 1,
-        fg_color     = "#282828",
-        text_color   = "#E0E0E0",
+    stop_button = create_active_button(
+        command = stop_button_command,
+        text    = "STOP",
+        icon    = stop_icon,
+        width   = 140,
+        height  = 30,
         border_color = "#EC1D1D"
     )
     stop_button.place(relx = column2_x, rely = row4_y, anchor = "center")
 
 def place_fluidify_button(): 
-
-    fluidify_button = CTkButton(
-        master     = window, 
-        command    = fludify_button_command,
-        image      = play_icon,
-        text       = "FLUIDIFY",
-        width      = 140,
-        height     = 30,
-        font       = bold11,
-        border_width = 1,
-        fg_color     = "#282828",
-        text_color   = "#E0E0E0",
-        border_color = "#0096FF"
+    fluidify_button = create_active_button(
+        command = fludify_button_command,
+        text    = "FLUIDIFY",
+        icon    = play_icon,
+        width   = 140,
+        height  = 30
     )
     fluidify_button.place(relx = column2_x, rely = row4_y, anchor = "center")
- 
+
 
 
 # Main functions ---------------------------
@@ -1831,19 +1913,16 @@ def on_app_close():
 
 class App():
     def __init__(self, window):
-
         self.toplevel_window = None
-
-        window.title('')
-        width        = 675
-        height       = 675
-        window.geometry("675x675")
-        window.minsize(width, height)
-        window.iconbitmap(find_by_relative_path("Assets" + os_separator + "logo.ico"))
-
         window.protocol("WM_DELETE_WINDOW", on_app_close)
 
+        window.title('')
+        window.geometry("675x675")
+        window.resizable(False, False)
+        window.iconbitmap(find_by_relative_path("Assets" + os_separator + "logo.ico"))
+
         place_app_name()
+        place_output_path_textbox()
         place_github_button()
         place_telegram_button()
 
@@ -1870,12 +1949,15 @@ if __name__ == "__main__":
     set_appearance_mode("Dark")
     set_default_color_theme("dark-blue")
 
-    ffmpeg_exe_path = find_by_relative_path(f"Assets{os_separator}ffmpeg_6.1.1_e.exe")
-    if os_path_exists(ffmpeg_exe_path):
-        print(f"Found external ffmpeg.exe")
-        os_environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe_path
+    if os_path_exists(FFMPEG_EXE_PATH): 
+        os_environ["IMAGEIO_FFMPEG_EXE"] = FFMPEG_EXE_PATH
 
     window = CTk() 
+
+    info_message            = StringVar()
+    selected_output_path    = StringVar()
+    selected_resize_factor  = StringVar()
+    selected_cpu_number     = StringVar()
 
     global selected_file_list
     global selected_AI_model
@@ -1897,16 +1979,12 @@ if __name__ == "__main__":
 
     selected_save_frames = True if default_save_frames == "Enabled" else False
 
-    info_message            = StringVar()
-    selected_resize_factor  = StringVar()
-    selected_cpu_number     = StringVar()
-
     selected_resize_factor.set(default_resize_factor)
     selected_cpu_number.set(default_cpu_number)
+    selected_output_path.set(default_output_path)
 
     info_message.set("Hi :)")
     selected_resize_factor.trace_add('write', update_file_widget)
-
 
     font   = "Segoe UI"    
     bold8  = CTkFont(family = font, size = 8, weight = "bold")
