@@ -10,7 +10,7 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/c2bd4f6a-b41b-4b18-adf6-b04fdde6f808"> </a> 
+    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/2a2ec303-be0e-44e9-9c6f-3a9a842c1582"> </a> 
 </div>
 
 
@@ -72,7 +72,7 @@ External packages are:
     - [x] New AI engine powered by onnxruntime-directml (https://pypi.org/project/onnxruntime-directml/)
     - [x] Python 3.11 (~10% performance improvements)
     - [x] Display frame-generated videos info in the GUI
-    - [ ] FFMPEG 6.1.1 (latest release)
+    - [x] FFMPEG 7 (latest release)
     - [ ] Python 3.12
     - [ ] Video frame-generation pause and restart
 
