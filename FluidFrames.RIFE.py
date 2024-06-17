@@ -1601,16 +1601,17 @@ def open_info_frame_generation_option():
 
 def open_info_gpu():
     option_list = [
-        " Keep in mind that the more powerful the chosen gpu is, the faster the upscaling will be",
-        
-        " For optimal performance, it is essential to regularly update your GPU drivers",
+        "\n It is possible to select up to 4 GPUs, via the index (also visible in the Task Manager):\n" +
+        "  • GPU 1 (GPU 0 in Task manager)\n" + 
+        "  • GPU 2 (GPU 1 in Task manager)\n" + 
+        "  • GPU 3 (GPU 2 in Task manager)\n" + 
+        "  • GPU 4 (GPU 3 in Task manager)\n",
 
-        "\n Windows handles multiple GPUs by categorising them:\n" +
-        "  • GPU High performance\n" + 
-        "  • GPU Power saving\n" +
-        "\n In the case of a single GPU, select 'High performance'\n"
-
-
+        "\n NOTES\n" +
+        "  • Keep in mind that the more powerful the chosen gpu is, the faster the upscaling will be\n" +
+        "  • For optimal performance, it is essential to regularly update your GPUs drivers\n" +
+        "  • Selecting the index of a GPU not present in the PC will cause the app to use the CPU for AI operations\n"+
+        "  • In the case of a single GPU, select 'GPU 1'\n"
     ]
 
     CTkMessageBox(
