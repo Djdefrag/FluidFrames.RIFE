@@ -1064,6 +1064,28 @@ def prepare_output_video_frame_filenames(
 
     return total_frames_paths
 
+def copy_file_metadata(
+        original_file_path: str, 
+        upscaled_file_path: str
+        ) -> None:
+    
+    exiftool_cmd = [
+        EXIFTOOL_EXE_PATH, 
+        '-fast', 
+        '-TagsFromFile', 
+        original_file_path, 
+        '-overwrite_original', 
+        '-all:all',
+        '-unsafe',
+        '-largetags', 
+        upscaled_file_path
+    ]
+    
+    try: 
+        subprocess_run(exiftool_cmd, check = True, shell = 'False')
+    except:
+        pass
+
 
 
 # Core functions ------------------------
@@ -1360,6 +1382,7 @@ def video_frame_generation(
     # 4. Video encoding
     write_process_status(processing_queue, f"{file_number}. Processing video")
     video_reconstruction_by_frames(video_path, video_audio_path, video_output_path, total_frames_paths, frame_gen_factor, slowmotion, cpu_number, selected_video_extension)
+    copy_file_metadata(video_path, video_output_path)
 
     # 5. Video frames directory keep or delete
     if not selected_keep_frames: remove_dir(target_directory)
