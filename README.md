@@ -10,7 +10,7 @@
 </div>
 <br>
 <div align="center">
-    <img src="https://github.com/Djdefrag/FluidFrames.RIFE/assets/32263112/2a2ec303-be0e-44e9-9c6f-3a9a842c1582"> </a> 
+    <img src="https://github.com/user-attachments/assets/47c4a9ab-0f19-438d-8128-7bc1a09a0d54"> </a> 
 </div>
 
 
@@ -41,6 +41,11 @@ External packages are:
 
 ## Features.
 - [x] Elegant and easy to use GUI
+- [x] Resize video before interpolation
+- [x] Multiple GPUs support
+- [x] Compatible video  - mp4, wemb, gif, mkv, flv, avi, mov, qt
+- [x] Video frame-generation STOP&RESUME
+- [x] PRIVACY FOCUSED - no internet connection required / everything is on your PC
 - [x] Video frames generation x2 / x4 / x8
    - 30fps => x2 => 60fps
    - 30fps => x4 => 120fps
@@ -49,9 +54,6 @@ External packages are:
    - 30fps => x2_slowmotion => 30fps - 2 times slower
    - 30fps => x4_slowmotion => 30fps - 4 times slower
    - 30fps => x8_slowmotion => 30fps - 8 times slower
-- [x] Resize video before interpolation
-- [x] Multiple gpu backend
-- [x] Compatible video  - mp4, wemb, gif, mkv, flv, avi, mov, qt 
 
 ## Next steps. 🤫
 - [x] 1.X versions
@@ -69,12 +71,13 @@ External packages are:
     - [x] Support RIFE AI model updates
     - [x] Support for RIFE_Lite AI model (a faster and lighter version of RIFE) 
 - [ ] 3.x versions (now under development)
-    - [x] New AI engine powered by onnxruntime-directml (https://pypi.org/project/onnxruntime-directml/)
+    - [x] New AI engine powered by onnxruntime-directml (https://github.com/microsoft/onnxruntime)
     - [x] Python 3.11 (~10% performance improvements)
     - [x] Display frame-generated videos info in the GUI
     - [x] FFMPEG 7 (latest release)
+    - [x] Saving user settings (AI model, GPU, CPU etc.)
+    - [x] Video frame-generation STOP&RESUME
     - [ ] Python 3.12
-    - [ ] Video frame-generation pause and restart
 
 
 ### Some Examples.
