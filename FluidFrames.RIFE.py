@@ -182,30 +182,18 @@ if sys.stdout is None: sys.stdout = open(os_devnull, "w")
 if sys.stderr is None: sys.stderr = open(os_devnull, "w")
 
 supported_file_extensions = [
-    '.mp4', '.MP4',
-    '.webm', '.WEBM',
-    '.mkv', '.MKV',
-    '.flv', '.FLV',
-    '.gif', '.GIF',
-    '.m4v', ',M4V',
-    '.avi', '.AVI',
-    '.mov', '.MOV',
-    '.qt', '.3gp', 
-    '.mpg', '.mpeg'
-    ]
+    ".mp4", ".MP4", ".webm", ".WEBM", ".mkv", ".MKV",
+    ".flv", ".FLV", ".gif", ".GIF", ".m4v", ".M4V",
+    ".avi", ".AVI", ".mov", ".MOV", ".qt", ".3gp",
+    ".mpg", ".mpeg", ".vob", ".VOB"
+]
 
 supported_video_extensions = [
-    '.mp4', '.MP4',
-    '.webm', '.WEBM',
-    '.mkv', '.MKV',
-    '.flv', '.FLV',
-    '.gif', '.GIF',
-    '.m4v', ',M4V',
-    '.avi', '.AVI',
-    '.mov', '.MOV',
-    '.qt', '.3gp', 
-    '.mpg', '.mpeg'
-    ]
+    ".mp4", ".MP4", ".webm", ".WEBM", ".mkv", ".MKV",
+    ".flv", ".FLV", ".gif", ".GIF", ".m4v", ".M4V",
+    ".avi", ".AVI", ".mov", ".MOV", ".qt", ".3gp",
+    ".mpg", ".mpeg", ".vob", ".VOB"
+]
 
 
 
