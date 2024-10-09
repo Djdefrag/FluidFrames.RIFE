@@ -99,6 +99,7 @@ from customtkinter import (
     set_appearance_mode,
     set_default_color_theme
 )
+from notifypy import Notify
 
 if sys.stdout is None: sys.stdout = open(os_devnull, "w")
 if sys.stderr is None: sys.stderr = open(os_devnull, "w")
@@ -1320,6 +1321,9 @@ def frame_generation_orchestrator(
                 selected_keep_frames
             )
 
+        # Show notification when the entire queue is empty
+        show_notification("FluidFrames", "All video interpolation jobs are complete!")
+
         write_process_status(processing_queue, f"{COMPLETED_STATUS}")
 
     except Exception as exception:
@@ -1538,6 +1542,13 @@ def open_output_path_action() -> None:
     else:
         selected_output_path.set(asked_selected_output_path)
 
+# GUI notification function
+def show_notification(title: str, message: str) -> None:
+    notification = Notify()
+    notification.title = title
+    notification.message = message
+
+    notification.send()
 
 
 # GUI select from menus functions ---------------------------
