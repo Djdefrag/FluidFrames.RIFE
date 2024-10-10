@@ -85,6 +85,7 @@ from numpy import (
 # GUI imports
 from tkinter import StringVar
 from tkinter import DISABLED
+from tkinter import BooleanVar
 from customtkinter import (
     CTk,
     CTkButton,
@@ -95,6 +96,7 @@ from customtkinter import (
     CTkOptionMenu,
     CTkScrollableFrame,
     CTkToplevel,
+    CTkCheckBox,
     filedialog,
     set_appearance_mode,
     set_default_color_theme
@@ -140,15 +142,16 @@ if os_path_exists(USER_PREFERENCE_PATH):
     print(f"[{app_name}] Preference file exist")
     with open(USER_PREFERENCE_PATH, "r") as json_file:
         json_data = json_load(json_file)
-        default_AI_model          = json_data["default_AI_model"]
-        default_generation_option = json_data["default_generation_option"]
-        default_gpu               = json_data["default_gpu"]
-        default_image_extension   = json_data["default_image_extension"]
-        default_video_extension   = json_data["default_video_extension"]
-        default_keep_frames       = json_data["default_keep_frames"]
-        default_output_path       = json_data["default_output_path"]
-        default_resize_factor     = json_data["default_resize_factor"]
-        default_cpu_number        = json_data["default_cpu_number"]
+        default_AI_model           = json_data["default_AI_model"]
+        default_generation_option  = json_data["default_generation_option"]
+        default_gpu                = json_data["default_gpu"]
+        default_image_extension    = json_data["default_image_extension"]
+        default_video_extension    = json_data["default_video_extension"]
+        default_keep_frames        = json_data["default_keep_frames"]
+        default_output_path        = json_data["default_output_path"]
+        default_resize_factor      = json_data["default_resize_factor"]
+        default_cpu_number         = json_data["default_cpu_number"]
+        default_notify_on_complete = json_data.get("default_notify_on_complete", False)
 else:
     print(f"[{app_name}] Preference file does not exist, using default coded value")
     default_AI_model          = AI_models_list[0]
@@ -160,6 +163,7 @@ else:
     default_output_path       = OUTPUT_PATH_CODED
     default_resize_factor     = str(50)
     default_cpu_number        = str(4)
+    default_notify_on_complete = False
 
 
 COMPLETED_STATUS = "Completed"
@@ -753,6 +757,18 @@ def create_text_box(textvariable: StringVar) -> CTkEntry:
         border_color  = "#404040",
     )
 
+def create_notify_checkbox(boolvariable: BooleanVar) -> CTkCheckBox:
+    return CTkCheckBox(
+        master=window,
+        text="Notify on complete",
+        variable=boolvariable,
+        onvalue=True,
+        offvalue=False,
+        text_color="#C0C0C0",
+        fg_color="#000000",
+        border_color="#404040"
+    )
+
 def create_text_box_output_path(textvariable: StringVar) -> CTkEntry:
     return CTkEntry(
         master        = window, 
@@ -1184,7 +1200,8 @@ def generate_button_command() -> None:
                 selected_video_extension, 
                 resize_factor, 
                 cpu_number, 
-                selected_keep_frames
+                selected_keep_frames,
+                notify_on_complete
             )
         )
         process_frame_generation_orchestrator.start()
@@ -1291,7 +1308,8 @@ def frame_generation_orchestrator(
         selected_video_extension: str,
         resize_factor: int,
         cpu_number: int,
-        selected_keep_frames: bool
+        selected_keep_frames: bool,
+        selected_notify: bool
         ) -> None:
             
     frame_gen_factor, slowmotion = check_frame_generation_option(selected_generation_option)
@@ -1322,7 +1340,8 @@ def frame_generation_orchestrator(
             )
 
         # Show notification when the entire queue is empty
-        show_notification("FluidFrames", "All video interpolation jobs are complete!")
+        if selected_notify:
+            show_notification("FluidFrames", "All video interpolation jobs are complete!")
 
         write_process_status(processing_queue, f"{COMPLETED_STATUS}")
 
@@ -1437,6 +1456,7 @@ def user_input_checks() -> None:
     global selected_image_extension
     global resize_factor
     global cpu_number
+    global notify_on_complete
 
     is_ready = True
 
@@ -1473,6 +1493,8 @@ def user_input_checks() -> None:
         is_ready = False
     else: cpu_number = int(cpu_number)
 
+    # notify on complete ------------------------------------------
+    notify_on_complete = selected_notify.get()
 
     return is_ready
 
@@ -1944,6 +1966,9 @@ def place_generation_button():
     )
     generation_button.place(relx = column2_x, rely = row4_y, anchor = "center")
 
+def place_notify_checkbox():
+    notify_checkbox = create_notify_checkbox(selected_notify)
+    notify_checkbox.place(relx = column1_x, rely = row4_y, anchor = "center")
 
 
 # Main functions ---------------------------
@@ -1961,6 +1986,7 @@ def on_app_close():
     global selected_video_extension
     global resize_factor
     global cpu_number
+    global notify_on_complete
 
     AI_model_to_save          = f"{selected_AI_model}"
     generation_option_to_save = f"{selected_generation_option}"
@@ -1970,15 +1996,16 @@ def on_app_close():
     video_extension_to_save   = f"{selected_video_extension}"
 
     user_preference = {
-        "default_AI_model":          AI_model_to_save,
-        "default_generation_option": generation_option_to_save,
-        "default_gpu":               gpu_to_save,
-        "default_image_extension":   image_extension_to_save,
-        "default_video_extension":   video_extension_to_save,
-        "default_keep_frames":       keep_frames_to_save,
-        "default_output_path":       selected_output_path.get(),
-        "default_resize_factor":     str(selected_resize_factor.get()),
-        "default_cpu_number":        str(selected_cpu_number.get()),
+        "default_AI_model":           AI_model_to_save,
+        "default_generation_option":  generation_option_to_save,
+        "default_gpu":                gpu_to_save,
+        "default_image_extension":    image_extension_to_save,
+        "default_video_extension":    video_extension_to_save,
+        "default_keep_frames":        keep_frames_to_save,
+        "default_output_path":        selected_output_path.get(),
+        "default_resize_factor":      str(selected_resize_factor.get()),
+        "default_cpu_number":         str(selected_cpu_number.get()),
+        "default_notify_on_complete": notify_on_complete,
     }
     user_preference_json = json_dumps(user_preference)
     with open(USER_PREFERENCE_PATH, "w") as preference_file:
@@ -2009,6 +2036,7 @@ class App():
         place_gpu_menu()
         place_keep_frames_menu()
         place_cpu_textbox()
+        place_notify_checkbox()
 
         place_image_output_menu()
         place_video_extension_menu()
@@ -2032,6 +2060,7 @@ if __name__ == "__main__":
     selected_output_path   = StringVar()
     selected_resize_factor = StringVar()
     selected_cpu_number    = StringVar()
+    selected_notify = BooleanVar(value=False)
 
     global selected_file_list
     global selected_AI_model
@@ -2042,6 +2071,7 @@ if __name__ == "__main__":
     global cpu_number
     global selected_image_extension
     global selected_video_extension
+    global notify_on_complete
 
     selected_file_list = []
 
@@ -2056,6 +2086,8 @@ if __name__ == "__main__":
     selected_resize_factor.set(default_resize_factor)
     selected_cpu_number.set(default_cpu_number)
     selected_output_path.set(default_output_path)
+    selected_notify.set(default_notify_on_complete)
+    notify_on_complete = selected_notify.get()
 
     info_message.set("Hi :)")
     selected_resize_factor.trace_add('write', update_file_widget)
