@@ -3,6 +3,7 @@ onnxruntime-directml==1.17.3
 
 #GUI
 customtkinter
+notify-py
 
 #UTILS
 numpy==1.26.4
