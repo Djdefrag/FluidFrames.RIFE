@@ -26,9 +26,9 @@ from os import (
     sep        as os_separator,
     devnull    as os_devnull,
     environ    as os_environ,
-    cpu_count  as os_cpu_count,
     makedirs   as os_makedirs,
     listdir    as os_listdir,
+    remove     as os_remove
 )
 
 from os.path import (
@@ -43,7 +43,6 @@ from os.path import (
 
 # Third-party library imports
 from natsort          import natsorted
-from moviepy.editor   import VideoFileClip 
 from moviepy.video.io import ImageSequenceClip 
 from onnxruntime      import InferenceSession as onnxruntime_inferenceSession
 
@@ -110,7 +109,7 @@ def find_by_relative_path(relative_path: str) -> str:
 
 
 app_name   = "FluidFrames"
-version    = "3.9"
+version    = "3.10"
 dark_color = "#080808"
 
 githubme   = "https://github.com/Djdefrag/FluidFrames.RIFE"
@@ -831,7 +830,7 @@ def save_extracted_frames(
     pool.close()
     pool.join()
 
-def extract_video_frames_and_audio(
+def extract_video_frames(
         processing_queue: multiprocessing_Queue,
         file_number: int,
         target_directory: str,
@@ -842,15 +841,6 @@ def extract_video_frames_and_audio(
     ) -> tuple[list[str], str]:
 
     create_dir(target_directory)
-
-    # Audio extraction
-    with VideoFileClip(video_path) as video_file_clip:
-        try: 
-            write_process_status(processing_queue, f"{file_number}. Extracting video audio")
-            video_audio_path = f"{target_directory}{os_separator}audio.wav"
-            video_file_clip.audio.write_audiofile(video_audio_path, verbose = False, logger = None)
-        except:
-            pass
 
     # Video frame extraction + resize
     frames_number_to_save = cpu_number * FRAMES_FOR_CPU
@@ -885,9 +875,8 @@ def extract_video_frames_and_audio(
     
     return video_frames_list
 
-def video_reconstruction_by_frames(
+def video_encoding(
         video_path: str, 
-        audio_path: str,
         video_output_path: str,
         total_frames_paths: list, 
         frame_gen_factor: int,
@@ -897,46 +886,57 @@ def video_reconstruction_by_frames(
         ) -> None:
     
     match selected_video_extension:
-        case '.mp4 (x264)':
-            selected_video_extension = '.mp4'
-            codec = 'libx264'
-        case '.mp4 (x265)':
-            selected_video_extension = '.mp4'
-            codec = 'libx265'
-        case '.avi':
-            selected_video_extension = '.avi'
-            codec = 'png'
+        case ".mp4 (x264)": codec = "libx264"
+        case ".mp4 (x265)": codec = "libx265"
+        case ".avi":        codec = "png"
+
+
+    no_audio_path = f"{os_path_splitext(video_output_path)[0]}_no_audio{os_path_splitext(video_output_path)[1]}"
+    video_fps     = get_video_fps(video_path) if slowmotion else get_video_fps(video_path) * frame_gen_factor
+    video_clip    = ImageSequenceClip.ImageSequenceClip(sequence = total_frames_paths, fps = video_fps)
 
     if slowmotion:
-        frame_rate = get_video_fps(video_path)
+        video_clip.write_videofile(
+            filename = video_output_path,
+            fps      = video_fps,
+            codec    = codec,
+            threads  = cpu_number,
+            verbose  = False,
+            logger   = None,
+            audio    = None,
+            bitrate  = "12M",
+            preset   = "ultrafast"
+        )
     else:
-        frame_rate = get_video_fps(video_path) * frame_gen_factor
+        video_clip.write_videofile(
+            filename = no_audio_path,
+            fps      = video_fps,
+            codec    = codec,
+            threads  = cpu_number,
+            verbose  = False,
+            logger   = None,
+            audio    = None,
+            bitrate  = "12M",
+            preset   = "ultrafast"
+        )  
 
-
-    clip = ImageSequenceClip.ImageSequenceClip(total_frames_paths, fps = frame_rate)
-    if slowmotion:
-        clip.write_videofile(
-            video_output_path,
-            fps     = frame_rate,
-            codec   = codec,
-            bitrate = '12M',
-            verbose = False,
-            logger  = None,
-            threads = cpu_number,
-            preset  = "ultrafast"
-        ) 
-    else:
-        clip.write_videofile(
-            video_output_path,
-            fps     = frame_rate,
-            audio   = audio_path if os_path_exists(audio_path) else None,
-            codec   = codec,
-            bitrate = '12M',
-            verbose = False,
-            logger  = None,
-            threads = cpu_number,
-            preset  = "ultrafast"
-        )    
+        # Copy the audio from original video
+        audio_passthrough_command = [
+            FFMPEG_EXE_PATH,
+            "-y",
+            "-i", video_path,
+            "-i", no_audio_path,
+            "-c:v", "copy",
+            "-map", "1:v:0",
+            "-map", "0:a?",
+            "-c:a", "copy",
+            video_output_path
+        ]
+        try: 
+            subprocess_run(audio_passthrough_command, check = True, shell = "False")
+            if os_path_exists(no_audio_path): os_remove(no_audio_path)
+        except:
+            pass
 
 def check_video_frame_generation_resume(
         target_directory: str, 
@@ -1350,7 +1350,6 @@ def video_frame_generation(
     # 1. Preparation
     target_directory  = prepare_output_video_directory_name(video_path, selected_output_path, selected_AI_model, frame_gen_factor, slowmotion, resize_factor)
     video_output_path = prepare_output_video_filename(video_path, selected_output_path, selected_AI_model, frame_gen_factor, slowmotion, resize_factor, selected_video_extension)
-    video_audio_path  = f"{target_directory}{os_separator}audio.wav"
 
     # 2. Resume frame generation OR Extract video frames and start frame generation
     frame_generation_resume = check_video_frame_generation_resume(target_directory, selected_AI_model, selected_image_extension)
@@ -1360,7 +1359,7 @@ def video_frame_generation(
         total_frames_paths     = prepare_output_video_frame_filenames(extracted_frames_paths, selected_AI_model, frame_gen_factor, selected_image_extension)
     else:
         write_process_status(processing_queue, f"{file_number}. Extracting video frames")
-        extracted_frames_paths = extract_video_frames_and_audio(processing_queue, file_number, target_directory, AI_instance, video_path, selected_image_extension, cpu_number)
+        extracted_frames_paths = extract_video_frames(processing_queue, file_number, target_directory, AI_instance, video_path, selected_image_extension, cpu_number)
         total_frames_paths     = prepare_output_video_frame_filenames(extracted_frames_paths, selected_AI_model, frame_gen_factor, selected_image_extension)
 
     # 3. Frame generation
@@ -1369,7 +1368,7 @@ def video_frame_generation(
 
     # 4. Video encoding
     write_process_status(processing_queue, f"{file_number}. Processing video")
-    video_reconstruction_by_frames(video_path, video_audio_path, video_output_path, total_frames_paths, frame_gen_factor, slowmotion, cpu_number, selected_video_extension)
+    video_encoding(video_path, video_output_path, total_frames_paths, frame_gen_factor, slowmotion, cpu_number, selected_video_extension)
     copy_file_metadata(video_path, video_output_path)
 
     # 5. Video frames directory keep or delete
