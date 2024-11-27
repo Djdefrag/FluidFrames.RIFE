@@ -26,13 +26,31 @@ FluidFrames.RIFE is a Windows app powered by RIFE AI to create frame-generated a
 - PraticalRIFE - https://github.com/hzwer/Practical-RIFE
 
 ## How is made. 🛠
+FluidFrames is completely written in Python, from backend to frontend. 
+- [x] pytorch (https://github.com/pytorch/pytorch)
+- [x] onnx (https://github.com/onnx/onnx)
+- [x] onnxconverter-common (https://github.com/microsoft/onnxconverter-common)
+- [x] onnxruntime-directml (https://github.com/microsoft/onnxruntime)
+- [x] customtkinter (https://github.com/TomSchimansky/CustomTkinter)
+- [x] openCV (https://github.com/opencv/opencv)
+- [x] moviepy (https://github.com/Zulko/moviepy)
+- [x] pyInstaller (https://github.com/pyinstaller/pyinstaller)
 
-FluidFrames.RIFE is completely written in Python, from backend to frontend. 
-External packages are:
-- AI  -> torch / onnxruntime-directml
-- GUI -> customtkinter
-- Image/video -> OpenCV / moviepy
-- Packaging   -> Nuitka
+## Make it work by yourself. 👨‍💻
+Prerequisites.
+- Python installed on your pc (https://www.python.org/downloads/release/python-3119/)
+- VSCode installed on your pc (https://code.visualstudio.com/)
+- FFMPEG.exe downloaded (https://www.gyan.dev/ffmpeg/builds/) RELEASE BUILD > ffmpeg-release-essentials.7z
+
+Getting started.
+- Download the project on your PC (Green button Code > Download ZIP)
+- Extract the project from the .zip
+- Extract FFMPEG.exe in /Assets folder
+- Open the project with VSCode (Drag&Drop the project directory on VSCode)
+- Click on FluidFrames.py from left bar (VSCode will ask to install Python plugins)
+- Install dependencies. In VSCode there is the "Terminal" panel, click there and execute the command "pip install -r requirements.txt"
+- Close VSCode and re-open it (this will refresh all the dependecies installed)
+- Click on the "Play button" in the upper right corner of VSCode
 
 ## Requirements. 🤓
 - [ ] Windows 11 / Windows 10
@@ -72,12 +90,12 @@ External packages are:
     - [x] Support for RIFE_Lite AI model (a faster and lighter version of RIFE) 
 - [ ] 3.x versions (now under development)
     - [x] New AI engine powered by onnxruntime-directml (https://github.com/microsoft/onnxruntime)
-    - [x] Python 3.11 (~10% performance improvements)
+    - [x] Python 3.11 (performance improvements)
+    - [x] Python 3.12 (performance improvements)
     - [x] Display frame-generated videos info in the GUI
     - [x] FFMPEG 7 (latest release)
     - [x] Saving user settings (AI model, GPU, CPU etc.)
     - [x] Video frame-generation STOP&RESUME
-    - [ ] Python 3.12
 
 
 ### Some Examples.
