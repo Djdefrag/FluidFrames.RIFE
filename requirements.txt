@@ -10,3 +10,13 @@ moviepy
 opencv-python-headless
 natsort
 pyinstaller
+imageio
+natsort
+proglog
+tqdm
+imageio
+imageio-ffmpeg
+decorator
+pillow
+packaging
+darkdetect
